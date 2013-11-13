@@ -1,6 +1,8 @@
 package com.centropoly.oxo;
 
 import java.io.IOException;
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.util.Collections;
 import java.util.Enumeration;
 import java.util.HashMap;
@@ -20,6 +22,11 @@ public class OXORequest extends HttpServletRequestWrapper
         super(request);
 
         this.dynamicParameters = new HashMap<String, String[]>();
+    }
+    
+    public URI getURI() throws URISyntaxException
+    {
+        return new URI(getServletPath() + ((getQueryString() != null) ? "?" + getQueryString() : ""));
     }
 
     /**

@@ -2,7 +2,6 @@ package com.centropoly.oxo;
 
 import com.centropoly.oxo.converter.OXOResponseConverter;
 import com.centropoly.oxo.converter.OXORequestConverter;
-import com.centropoly.oxo.converter.LocaleConverter;
 import com.centropoly.oxo.converter.ClientConverter;
 import com.thoughtworks.xstream.XStream;
 import com.thoughtworks.xstream.io.xml.DomDriver;
@@ -10,7 +9,6 @@ import com.thoughtworks.xstream.io.xml.TraxSource;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.net.URISyntaxException;
-import java.util.Locale;
 import javax.servlet.ServletException;
 import javax.servlet.http.HttpServlet;
 import javax.servlet.http.HttpServletRequest;
