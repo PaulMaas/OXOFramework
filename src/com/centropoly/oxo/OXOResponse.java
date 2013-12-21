@@ -1,7 +1,3 @@
-/*
- * To change this template, choose Tools | Templates
- * and open the template in the editor.
- */
 package com.centropoly.oxo;
 
 import java.util.ArrayList;
@@ -10,16 +6,16 @@ import javax.servlet.http.HttpServletResponse;
 import javax.servlet.http.HttpServletResponseWrapper;
 
 /**
- *
- * @author paul
+ * @author Paul van der Maas
  */
 public class OXOResponse extends HttpServletResponseWrapper
 {
-    private Resource resource = null;
-    private OutputType outputType = null;
+    private OutputType outputType = OutputType.XML_UNTRANSFORMED;
     
-    private List<Exception> exceptions = null;
-    private List<Notification> notifications = null;
+    private List<Exception> exceptions;
+    private List<Notification> notifications;
+
+    private Data data;
 
     public OXOResponse(HttpServletResponse response)
     {
@@ -29,14 +25,18 @@ public class OXOResponse extends HttpServletResponseWrapper
         this.notifications = new ArrayList<Notification>();
     }
     
-    public void setResource(Resource resource) {
-        this.resource = resource;
+    public void setData(Data data) {
+        this.data = data;
     }
     
-    public Resource getResource() {
-        return this.resource;
+    public Data getData() {
+        return this.data;
     }
-    
+
+    public OXORequest getRequest() {
+        return OXOContext.getRequest();
+    }
+
     public void setOutputType(OutputType outputType) {
         this.outputType = outputType;
     }
@@ -111,8 +111,9 @@ public class OXOResponse extends HttpServletResponseWrapper
     {
         XHTML ("xhtml"),
         HTML ("html"),
+        TEXT ("text"),
         XML ("xml"),
-        TEXT ("text");
+        XML_UNTRANSFORMED ("xml");
 
         private final String value;
 

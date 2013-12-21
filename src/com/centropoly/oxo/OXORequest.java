@@ -24,6 +24,10 @@ public class OXORequest extends HttpServletRequestWrapper
         this.dynamicParameters = new HashMap<String, String[]>();
     }
     
+    public User getUser() {
+        return OXOContext.getUser();
+    }
+    
     public URI getURI() throws URISyntaxException
     {
         return new URI(getServletPath() + ((getQueryString() != null) ? "?" + getQueryString() : ""));

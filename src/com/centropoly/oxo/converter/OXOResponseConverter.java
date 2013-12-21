@@ -42,6 +42,14 @@ public class OXOResponseConverter implements Converter
             writer.endNode();
         }
         writer.endNode();
+        
+        writer.startNode("data");
+        context.convertAnother(response.getData());
+        writer.endNode();
+
+        writer.startNode("request");
+        context.convertAnother(response.getRequest());
+        writer.endNode();
     }
 
     @Override

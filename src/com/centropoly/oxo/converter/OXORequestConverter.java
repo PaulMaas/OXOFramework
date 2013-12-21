@@ -22,6 +22,10 @@ public class OXORequestConverter implements Converter
     {
         OXORequest request = (OXORequest) object;
         Map parameterMap = request.getParameterMap();
+
+        writer.startNode("user");
+        context.convertAnother(request.getUser());
+        writer.endNode();
         
         writer.startNode("contextPath");
         writer.setValue(request.getContextPath());
