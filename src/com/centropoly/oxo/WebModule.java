@@ -5,6 +5,13 @@ package com.centropoly.oxo;
  */
 public abstract class WebModule extends OXOServlet
 {
+    /**
+     * This is a good place to (for instance) set up your customized OXOContext
+     * instance. For instance, by overriding this function in a subclass.
+     * 
+     * @param request
+     * @param response 
+     */
     @Override
     protected void initialize(OXORequest request, OXOResponse response) {
         super.initialize(request, response);

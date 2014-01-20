@@ -10,14 +10,11 @@ import com.thoughtworks.xstream.io.xml.TraxSource;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.io.PrintWriter;
-import java.net.URISyntaxException;
-import javax.servlet.ServletException;
+import javax.servlet.ServletOutputStream;
 import javax.servlet.http.HttpServlet;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
-import javax.xml.transform.ErrorListener;
 import javax.xml.transform.Transformer;
-import javax.xml.transform.TransformerConfigurationException;
 import javax.xml.transform.TransformerException;
 import javax.xml.transform.TransformerFactory;
 import javax.xml.transform.sax.SAXSource;
@@ -43,6 +40,9 @@ public abstract class OXOServlet extends HttpServlet
 {
     /**
      * This method should be overridden to do any servlet-specific initialization.
+     * 
+     * @param request
+     * @param response
      */
     protected void initialize(OXORequest request, OXOResponse response) {}
     
@@ -68,15 +68,14 @@ public abstract class OXOServlet extends HttpServlet
      * @param response
      * @throws SAXException
      * @throws IOException
-     * @throws URISyntaxException
-     * @throws TransformerException
+     * @throws javax.xml.transform.TransformerException
      */
-    protected void outputResponse(OXOResponse response) throws Exception
+    protected void outputResponse(OXOResponse response) throws IOException, SAXException, TransformerException
     {
         outputResponse(response, response.getOutputStream());
     }
     
-    protected void outputResponse(OXOResponse response, OutputStream outputStream) throws Exception {
+    protected void outputResponse(OXOResponse response, OutputStream outputStream) throws IOException, SAXException, TransformerException {
         Data data = response.getData();
 
         // A committed response indicates that we should not try to generate the resource output.
@@ -107,8 +106,8 @@ public abstract class OXOServlet extends HttpServlet
             }
 
             // Write output to the given outputstream.
-            if (response.getOutputType() == null) {
-                xStream.toXML(response, outputStream);
+            if (response.getOutputType() == null || response.getOutputType() == OXOResponse.OutputType.XML_UNTRANSFORMED) {
+                outputResponse(response, outputStream, xStream);
             } else {
                 transformOutputResponse(response, outputStream, xStream);
             }
@@ -116,15 +115,34 @@ public abstract class OXOServlet extends HttpServlet
     }
     
     /**
-     * TODO: This needs to return a result instead of writing directly to output to break up the transformation process
-     * and allow WebService to transform the output again in case of Json.
+     * Output the response as XML without transformation to the given
+     * OutputStream. This method is for internal use.
      * 
      * @param response
-     * @param xStream
-     * @param out
-     * @throws Exception 
+     * @param outputStream
+     * @param xStream 
+     * @throws java.io.IOException
      */
-    protected void transformOutputResponse(OXOResponse response, OutputStream outputStream, XStream xStream) throws Exception {
+    protected void outputResponse(OXOResponse response, OutputStream outputStream, XStream xStream) throws IOException {
+        // Only set the content headers if we are outputting to a servlet output stream.
+        if (outputStream instanceof ServletOutputStream) {
+            response.setContentType("text/xml");
+            response.setCharacterEncoding("UTF-8");
+        }
+        xStream.toXML(response, outputStream);
+    }
+    
+    /**
+     * Transform the response XML, then output the result of the transformation to the given
+     * OutputStream. This method is for internal use.
+     * 
+     * @param response
+     * @param outputStream
+     * @param xStream
+     * @throws java.io.IOException
+     * @throws org.xml.sax.SAXException
+     */
+    protected void transformOutputResponse(OXOResponse response, OutputStream outputStream, XStream xStream) throws IOException, SAXException, TransformerException {
         Data data = response.getData();
 
         // Create an entity resolver which will be used to resolve the root XSL template
@@ -159,61 +177,42 @@ public abstract class OXOServlet extends HttpServlet
         // Create a transformer.
         TransformerFactory transformerFactory = TransformerFactory.newInstance();
         transformerFactory.setURIResolver(new OXOURIResolver(entityResolver));
+        transformerFactory.setErrorListener(new OXOErrorListener());
 
-        ErrorListener errorListener = new ErrorListener() {
-            @Override
-            public void warning(TransformerException exception) throws TransformerException {
-                throw new RuntimeException(exception.getMessage());
-            }
-
-            @Override
-            public void error(TransformerException exception) throws TransformerException {
-                throw new RuntimeException(exception.getMessage());
-            }
-
-            @Override
-            public void fatalError(TransformerException exception) throws TransformerException {
-                throw new RuntimeException(exception.getMessage());
-            }
-
-        };
-        transformerFactory.setErrorListener(errorListener);
-
+        // TODO: We can probably get rid of this try and let the exception fall through.
         try
         {
             Transformer transformer = transformerFactory.newTransformer(xslSource);
 
-            String mediaType = transformer.getOutputProperty("media-type");
-            if (mediaType == null)
-            {
-                // Set the default.
-                mediaType = "text/xml"; // NOTE!! Seems this might need a little more. NOTE!!
+            // Only set the content headers if we are outputting the result
+            // of the tranformation to a servlet output stream.
+            if (outputStream instanceof ServletOutputStream) {
+                String mediaType = transformer.getOutputProperty("media-type");
+                if (mediaType != null)
+                {
+                    response.setContentType(mediaType);
+                }
+                String encoding = transformer.getOutputProperty("encoding");
+                if (encoding != null)
+                {
+                    response.setCharacterEncoding(encoding);
+                }
             }
 
-            String encoding = transformer.getOutputProperty("encoding");
-            if (encoding == null)
-            {
-                // Set the default.
-                encoding = "UTF-8";
-            }
-
-            // Set important response headers.
-            response.setContentType(mediaType);
-            response.setCharacterEncoding(encoding);
-            
             transformer.transform(xmlSource, new StreamResult(outputStream));
         }
-        catch (TransformerConfigurationException exception)
+        catch (TransformerException exception)
         {
-            throw new Exception(exception.getMessage() + ". This stylesheet may contain an error: " + xslTemplate + ".", exception);
+            throw new TransformerException(exception.getMessage() + ". This stylesheet may contain an error: " + xslTemplate + ".", exception);
         }
     }
 
     /**
-     * Processes requests for both HTTP <code>GET</code> and <code>POST</code> methods.
+     * Handle requests for both HTTP <code>GET</code> and <code>POST</code> methods.
      *
-     * @param request servlet request
-     * @param response servlet response
+     * @param request
+     * @param response
+     * @throws java.io.IOException
      */
     protected void handleRequest(HttpServletRequest request, HttpServletResponse response) throws IOException
     {
@@ -291,9 +290,10 @@ public abstract class OXOServlet extends HttpServlet
      *
      * @param request servlet request
      * @param response servlet response
+     * @throws java.io.IOException
      */
     @Override
-    protected void doGet(HttpServletRequest request, HttpServletResponse response) throws ServletException, IOException
+    protected void doGet(HttpServletRequest request, HttpServletResponse response) throws IOException
     {
         handleRequest(request, response);
     }
@@ -303,9 +303,10 @@ public abstract class OXOServlet extends HttpServlet
      *
      * @param request servlet request
      * @param response servlet response
+     * @throws java.io.IOException
      */
     @Override
-    protected void doPost(HttpServletRequest request, HttpServletResponse response) throws ServletException, IOException
+    protected void doPost(HttpServletRequest request, HttpServletResponse response) throws IOException
     {
         handleRequest(request, response);
     }
