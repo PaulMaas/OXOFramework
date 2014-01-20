@@ -45,7 +45,7 @@ public abstract class WebService extends OXOServlet
                     try {
                         outputResponse(response, out);
                         out.close();
-                    } catch (IOException | SAXException | TransformerException exception) {
+                    } catch (Exception exception) {
                         try {
                             out.close();
                         } catch (IOException e) {
