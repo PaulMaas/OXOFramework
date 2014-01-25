@@ -17,6 +17,6 @@ public abstract class WebModule extends OXOServlet
         super.initialize(request, response);
 
         // Providing a default for the response output type.
-        response.setOutputType(OXOResponse.OutputType.XHTML);
+        response.setTransformationOutputType(OXOResponse.TransformationOutputType.XHTML);
     }
 }

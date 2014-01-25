@@ -72,7 +72,7 @@ public class OXORequest extends HttpServletRequestWrapper
     }
 
     @Override
-    public Map getParameterMap()
+    public Map<String, String[]> getParameterMap()
     {
         Map<String, String[]> mergedParameterMap = new HashMap<String, String[]>();
 
@@ -83,7 +83,7 @@ public class OXORequest extends HttpServletRequestWrapper
     }
 
     @Override
-    public Enumeration getParameterNames()
+    public Enumeration<String> getParameterNames()
     {
         return Collections.enumeration(this.getParameterMap().keySet());
     }

@@ -10,12 +10,12 @@ import javax.servlet.http.HttpServletResponseWrapper;
  */
 public class OXOResponse extends HttpServletResponseWrapper
 {
-    private OutputType outputType = OutputType.XML_UNTRANSFORMED;
+    private TransformationOutputType transformationOutputType = null;
     
     private List<Exception> exceptions;
     private List<Notification> notifications;
 
-    private Data data;
+    private Object data;
 
     public OXOResponse(HttpServletResponse response)
     {
@@ -25,11 +25,11 @@ public class OXOResponse extends HttpServletResponseWrapper
         this.notifications = new ArrayList<Notification>();
     }
     
-    public void setData(Data data) {
+    public void setData(Object data) {
         this.data = data;
     }
     
-    public Data getData() {
+    public Object getData() {
         return this.data;
     }
 
@@ -37,12 +37,12 @@ public class OXOResponse extends HttpServletResponseWrapper
         return OXOContext.getRequest();
     }
 
-    public void setOutputType(OutputType outputType) {
-        this.outputType = outputType;
+    public void setTransformationOutputType(TransformationOutputType transformationOutputType) {
+        this.transformationOutputType = transformationOutputType;
     }
     
-    public OutputType getOutputType() {
-        return this.outputType;
+    public TransformationOutputType getTransformationOutputType() {
+        return this.transformationOutputType;
     }
 
     public List<Exception> getExceptions()
@@ -107,17 +107,16 @@ public class OXOResponse extends HttpServletResponseWrapper
         }
     }
 
-    public enum OutputType
+    public enum TransformationOutputType
     {
         XHTML ("xhtml"),
         HTML ("html"),
         TEXT ("text"),
-        XML ("xml"),
-        XML_UNTRANSFORMED ("xml");
+        XML ("xml");
 
         private final String value;
 
-        OutputType(String value)
+        TransformationOutputType(String value)
         {
             this.value = value;
         }

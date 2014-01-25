@@ -1,12 +1,10 @@
 package com.centropoly.oxo;
 
-import com.centropoly.oxo.OXOResponse.OutputType;
+import com.centropoly.oxo.OXOResponse.TransformationOutputType;
 import java.io.IOException;
 import java.io.PipedInputStream;
 import java.io.PipedOutputStream;
 import java.lang.Thread.UncaughtExceptionHandler;
-import java.util.logging.Level;
-import java.util.logging.Logger;
 import javax.xml.transform.Transformer;
 import javax.xml.transform.TransformerException;
 import javax.xml.transform.TransformerFactory;
@@ -24,17 +22,20 @@ import org.xml.sax.helpers.XMLReaderFactory;
  */
 public abstract class WebService extends OXOServlet
 {
+    private boolean responseAsJSON = false;
+    private String jsonXslTemplate = "template:/xmltojsonml.xsl";
+
     @Override
     protected void initialize(OXORequest request, OXOResponse response) {
         super.initialize(request, response);
 
         // Providing a default for the response output type.
-        response.setOutputType(OutputType.XML);
+        response.setTransformationOutputType(TransformationOutputType.XML);
     }
 
     protected void outputResponseAsJSON(final OXOResponse response) throws IOException, SAXException, TransformerException {
         // We can only transform transformed XML or untransformed XML to JSON, hence the following requirement.
-        if (response.getOutputType() == null || response.getOutputType() == OXOResponse.OutputType.XML || response.getOutputType() == OXOResponse.OutputType.XML_UNTRANSFORMED) {
+        if (response.getTransformationOutputType() == null || response.getTransformationOutputType() == OXOResponse.TransformationOutputType.XML) {
             PipedInputStream in = new PipedInputStream();
             final PipedOutputStream out = new PipedOutputStream(in);
 
@@ -44,38 +45,36 @@ public abstract class WebService extends OXOServlet
                 public void run() {
                     try {
                         outputResponse(response, out);
-                        out.close();
                     } catch (Exception exception) {
+                        throw new RuntimeException(exception);
+                    } finally {
                         try {
                             out.close();
-                        } catch (IOException e) {
+                        } catch (IOException exception) {
                             throw new RuntimeException(exception);
                         }
-                        throw new RuntimeException(exception);
                     }
                 }
             };
             
-//            UncaughtExceptionHandler uncaughtExceptionHandler = new Thread.UncaughtExceptionHandler() {
-//                @Override
-//                public void uncaughtException(Thread thread, Throwable throwable) {
-//                    try {
-//                        in.close();
-//                    } catch (IOException exception) {
-//                        throw new RuntimeException(exception);
-//                    }
-//                    throw new RuntimeException(throwable);
-//                }
-//            };
+            UncaughtExceptionHandler uncaughtExceptionHandler = new Thread.UncaughtExceptionHandler() {
+                @Override
+                public void uncaughtException(Thread thread, Throwable throwable) {
+                    try {
+                        outputException(response, new Exception(throwable));
+                    } catch (IOException exception) {
+                    }
+                }
+            };
 
             Thread thread = new Thread(runner);
-//            thread.setUncaughtExceptionHandler(uncaughtExceptionHandler);
+            thread.setUncaughtExceptionHandler(uncaughtExceptionHandler);
             thread.start();
 
             // Create an entity resolver which will be used to resolve the XSL template.
             OXOEntityResolver entityResolver = new OXOEntityResolver("com.centropoly.oxo.templates", null);
 
-            String xslTemplate = "template:/xmltojsonml.xsl";
+            String xslTemplate = this.jsonXslTemplate;
 
             // Retrieve the Json XSL template.
             InputSource inputSource = entityResolver.resolveEntity(null, xslTemplate);
@@ -92,9 +91,7 @@ public abstract class WebService extends OXOServlet
             TransformerFactory transformerFactory = TransformerFactory.newInstance();
             transformerFactory.setErrorListener(new OXOErrorListener());
 
-            // TODO: It may be fine to remove this try if the original exception gives enough info.
-            try
-            {
+            try {
                 Transformer transformer = transformerFactory.newTransformer(xslSource);
 
                 String mediaType = transformer.getOutputProperty("media-type");
@@ -117,27 +114,33 @@ public abstract class WebService extends OXOServlet
 
                 // Transform the XML to JSON.
                 transformer.transform(xmlSource, new StreamResult(response.getOutputStream()));
-            }
-            catch (TransformerException exception)
-            {
-                throw new TransformerException(exception.getMessage() + ". There is a problem with the JSON XSL template.", exception);
+            } catch (TransformerException exception) {
+                // Wrap the exception to add additional information.
+                throw new TransformerException(exception.getMessage() + " The JSON stylesheet may contain an error: " + xslTemplate + ".", exception);
             }
         } else {
-            throw new TransformerException("Only XML can be transformed to JSON. The response's output type was set to " + response.getOutputType());
+            throw new TransformerException("Only XML can be transformed to JSON. The response's output type was set to " + response.getTransformationOutputType());
         }
     }
 
     @Override
     protected void outputResponse(OXOResponse response) throws IOException, SAXException, TransformerException {
-        // TODO: how do we want to decide this?
-        // Either through a request parameter or maybe the accept http header in the request.
-        // Or by setting a class property? Or a combination?
-        if (true) {
+        if (this.responseAsJSON) {
             this.outputResponseAsJSON(response);
         } else {
             super.outputResponse(response);
         }
     }
     
+    public boolean responseAsJSON() {
+        return this.responseAsJSON;
+    }
     
+    public void setResponseAsJSON() {
+        setResponseAsJSON(true);
+    }
+    
+    public void setResponseAsJSON(boolean responseAsJSON) {
+        this.responseAsJSON = responseAsJSON;
+    }
 }

@@ -10,6 +10,7 @@ import com.thoughtworks.xstream.io.xml.TraxSource;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.io.PrintWriter;
+import java.util.Collection;
 import javax.servlet.ServletOutputStream;
 import javax.servlet.http.HttpServlet;
 import javax.servlet.http.HttpServletRequest;
@@ -76,7 +77,7 @@ public abstract class OXOServlet extends HttpServlet
     }
     
     protected void outputResponse(OXOResponse response, OutputStream outputStream) throws IOException, SAXException, TransformerException {
-        Data data = response.getData();
+        Object data = response.getData();
 
         // A committed response indicates that we should not try to generate the resource output.
         // One case of this would be if the required action is a redirect or if output has been written
@@ -91,12 +92,7 @@ public abstract class OXOServlet extends HttpServlet
             xStream.registerConverter(new OXORequestConverter());
             xStream.registerConverter(new ClientConverter(), XStream.PRIORITY_LOW);
             xStream.registerConverter(new LocaleConverter());
-
             xStream.aliasType("response", OXOResponse.class);
-            xStream.aliasType("request", OXORequest.class);
-            xStream.aliasType("data", Data.class);
-            xStream.aliasType("user", User.class);
-            xStream.aliasType("preferences", Preferences.class);
 
             xStream.processAnnotations(data.getClass());
 
@@ -105,11 +101,11 @@ public abstract class OXOServlet extends HttpServlet
                 System.out.println(xStream.toXML(response));
             }
 
-            // Write output to the given outputstream.
-            if (response.getOutputType() == null || response.getOutputType() == OXOResponse.OutputType.XML_UNTRANSFORMED) {
-                outputResponse(response, outputStream, xStream);
-            } else {
+            // Write output to the given outputstream transformed or untransformed.
+            if (response.getTransformationOutputType() != null) {
                 transformOutputResponse(response, outputStream, xStream);
+            } else {
+                outputResponse(response, outputStream, xStream);
             }
         }
     }
@@ -143,7 +139,7 @@ public abstract class OXOServlet extends HttpServlet
      * @throws org.xml.sax.SAXException
      */
     protected void transformOutputResponse(OXOResponse response, OutputStream outputStream, XStream xStream) throws IOException, SAXException, TransformerException {
-        Data data = response.getData();
+        Object data = response.getData();
 
         // Create an entity resolver which will be used to resolve the root XSL template
         // as well as external entities referenced in the template itself.
@@ -156,7 +152,7 @@ public abstract class OXOServlet extends HttpServlet
         StringBuilder stringBuilder = new StringBuilder("template:");
         stringBuilder.append(canonicalClassName.replaceFirst(OXOContext.getServletsPackage(), "").replace(".", "/"));
         stringBuilder.append(".");
-        stringBuilder.append(response.getOutputType());
+        stringBuilder.append(response.getTransformationOutputType());
         stringBuilder.append(".xsl");
 
         String xslTemplate = stringBuilder.toString();
@@ -179,7 +175,6 @@ public abstract class OXOServlet extends HttpServlet
         transformerFactory.setURIResolver(new OXOURIResolver(entityResolver));
         transformerFactory.setErrorListener(new OXOErrorListener());
 
-        // TODO: We can probably get rid of this try and let the exception fall through.
         try
         {
             Transformer transformer = transformerFactory.newTransformer(xslSource);
@@ -203,7 +198,8 @@ public abstract class OXOServlet extends HttpServlet
         }
         catch (TransformerException exception)
         {
-            throw new TransformerException(exception.getMessage() + ". This stylesheet may contain an error: " + xslTemplate + ".", exception);
+            // Wrap the exception to add additional information.
+            throw new TransformerException(exception.getMessage() + " This stylesheet may contain an error: " + xslTemplate + ".", exception);
         }
     }
 
@@ -216,6 +212,10 @@ public abstract class OXOServlet extends HttpServlet
      */
     protected void handleRequest(HttpServletRequest request, HttpServletResponse response) throws IOException
     {
+        // Wrap the request and response.
+        OXORequest oxoRequest = new OXORequest(request);
+        OXOResponse oxoResponse = new OXOResponse(response);
+
         try
         {
             // For the OXO Framework to function properly a few parameters need
@@ -254,10 +254,6 @@ public abstract class OXOServlet extends HttpServlet
             {
                 OXOContext.setServletsPackage(servletsPackage);
             }
-            
-            // Wrap the request and response.
-            OXORequest oxoRequest = new OXORequest(request);
-            OXOResponse oxoResponse = new OXOResponse(response);
 
             // Initialize all contextual information needed by the
             // OXO Framework into OXOContext.
@@ -276,13 +272,17 @@ public abstract class OXOServlet extends HttpServlet
         }
         catch (Exception exception)
         {
-            PrintWriter out = new PrintWriter(response.getOutputStream());
-            out.println("An exception was encountered:");
-            out.println(exception.getMessage());
-            out.println();
-            exception.printStackTrace(out);
-            out.close();
+            outputException(oxoResponse, exception);
         }
+    }
+    
+    protected void outputException(OXOResponse response, Exception exception) throws IOException {
+        PrintWriter out = new PrintWriter(response.getOutputStream());
+        out.println("An exception was encountered:");
+        out.println(exception.getMessage());
+        out.println();
+        exception.printStackTrace(out);
+        out.close();
     }
 
     /**
