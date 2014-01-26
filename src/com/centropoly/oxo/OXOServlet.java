@@ -146,7 +146,9 @@ public abstract class OXOServlet extends HttpServlet
         OXOEntityResolver entityResolver = new OXOEntityResolver(OXOContext.getTemplatesPackage(), OXOContext.getPropertiesPackage());
 
         String canonicalClassName = data.getClass().getCanonicalName().toLowerCase();
-        canonicalClassName = canonicalClassName.substring(0, canonicalClassName.lastIndexOf("data"));
+        int dataIndex = canonicalClassName.lastIndexOf("data");
+        canonicalClassName = (dataIndex == -1) ? canonicalClassName : canonicalClassName.substring(0, dataIndex);
+        
         
         // Determine the XSL template to use in the transformation.
         StringBuilder stringBuilder = new StringBuilder("template:");
