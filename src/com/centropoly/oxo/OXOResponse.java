@@ -15,7 +15,7 @@ public class OXOResponse extends HttpServletResponseWrapper
     private List<Exception> exceptions;
     private List<Notification> notifications;
 
-    private Object data;
+    private Object data = null;
 
     public OXOResponse(HttpServletResponse response)
     {

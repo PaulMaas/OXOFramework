@@ -10,7 +10,6 @@ import com.thoughtworks.xstream.io.xml.TraxSource;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.io.PrintWriter;
-import java.util.Collection;
 import javax.servlet.ServletOutputStream;
 import javax.servlet.http.HttpServlet;
 import javax.servlet.http.HttpServletRequest;
@@ -93,8 +92,11 @@ public abstract class OXOServlet extends HttpServlet
             xStream.registerConverter(new ClientConverter(), XStream.PRIORITY_LOW);
             xStream.registerConverter(new LocaleConverter());
             xStream.aliasType("response", OXOResponse.class);
+            //xStream.omitField(data.getClass(), "this$0");
 
-            xStream.processAnnotations(data.getClass());
+            if (data != null) {
+                xStream.processAnnotations(data.getClass());
+            }
 
             // Print the XML generated for debugging purposes.
             if (this.getServletContext().getInitParameter("debug") != null && Boolean.valueOf(this.getServletContext().getInitParameter("debug"))) {

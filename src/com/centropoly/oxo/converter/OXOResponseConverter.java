@@ -2,6 +2,7 @@ package com.centropoly.oxo.converter;
 
 import com.centropoly.oxo.OXOResponse;
 import com.centropoly.oxo.OXOResponse.Notification;
+import com.centropoly.oxo.RequestParameterException;
 import com.thoughtworks.xstream.converters.Converter;
 import com.thoughtworks.xstream.converters.MarshallingContext;
 import com.thoughtworks.xstream.converters.UnmarshallingContext;
@@ -35,7 +36,14 @@ public class OXOResponseConverter implements Converter
         writer.startNode("exceptions");
         for (Exception exception : response.getExceptions())
         {
+            // TODO: Add an ExceptionConverter class to replace this block.
             writer.startNode("exception");
+            if (exception instanceof RequestParameterException)
+            {
+                writer.startNode("parameterName");
+                writer.setValue(((RequestParameterException)exception).getParameterName());
+                writer.endNode();
+            }
             writer.startNode("message");
             writer.setValue(exception.getMessage());
             writer.endNode();
@@ -44,7 +52,10 @@ public class OXOResponseConverter implements Converter
         writer.endNode();
         
         writer.startNode("data");
-        context.convertAnother(response.getData());
+        if (response.getData() != null)
+        {
+            context.convertAnother(response.getData());
+        }
         writer.endNode();
 
         writer.startNode("request");
