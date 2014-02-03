@@ -28,11 +28,19 @@ public class OXORequestConverter implements Converter
         writer.endNode();
         
         writer.startNode("contextPath");
-        writer.setValue(request.getContextPath());
+        if (request.getContextPath() != null)
+        {
+            writer.setValue(request.getContextPath());
+        }
         writer.endNode();
+
         writer.startNode("servletPath");
-        writer.setValue(request.getServletPath());
+        if (request.getServletPath() != null)
+        {
+            writer.setValue(request.getServletPath());
+        }
         writer.endNode();
+
         writer.startNode("parameters");
         for (Iterator iterator = parameterMap.entrySet().iterator(); iterator.hasNext();)
         {

@@ -47,7 +47,7 @@ public abstract class OXOServlet extends HttpServlet
     protected void initialize(OXORequest request, OXOResponse response) {}
     
     /**
-     * Executes the right operation(s), which should be determined by the properties of the request object.
+     * Executes operation(s) determined by the properties of the request object.
      * 
      * Input that may change which resource is generated and (how it is) returned should be handled at this level.
      * Input that may change the resource internally is typically handled in the constructor
@@ -92,9 +92,13 @@ public abstract class OXOServlet extends HttpServlet
             xStream.registerConverter(new ClientConverter(), XStream.PRIORITY_LOW);
             xStream.registerConverter(new LocaleConverter());
             xStream.aliasType("response", OXOResponse.class);
-            //xStream.omitField(data.getClass(), "this$0");
 
-            if (data != null) {
+            if (data != null)
+            {
+                // In case the data object is a non-static inner class, this will
+                // omit the reference to the outer class.
+                xStream.omitField(data.getClass(), "this$0");
+                
                 xStream.processAnnotations(data.getClass());
             }
 
