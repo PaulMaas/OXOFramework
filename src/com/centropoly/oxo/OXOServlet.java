@@ -3,6 +3,7 @@ package com.centropoly.oxo;
 import com.centropoly.oxo.converter.OXOResponseConverter;
 import com.centropoly.oxo.converter.OXORequestConverter;
 import com.centropoly.oxo.converter.ClientConverter;
+import com.centropoly.oxo.converter.DateTimeConverter;
 import com.centropoly.oxo.converter.LocaleConverter;
 import com.thoughtworks.xstream.XStream;
 import com.thoughtworks.xstream.io.xml.DomDriver;
@@ -91,6 +92,7 @@ public abstract class OXOServlet extends HttpServlet
             xStream.registerConverter(new OXORequestConverter());
             xStream.registerConverter(new ClientConverter(), XStream.PRIORITY_LOW);
             xStream.registerConverter(new LocaleConverter());
+            xStream.registerConverter(new DateTimeConverter());
             xStream.aliasType("response", OXOResponse.class);
 
             if (data != null)
