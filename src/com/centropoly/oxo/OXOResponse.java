@@ -62,6 +62,12 @@ public class OXOResponse extends HttpServletResponseWrapper
         this.exceptions.add(exception);
     }
 
+    // For convenience...
+    public void addException(String exception)
+    {
+        this.exceptions.add(new Exception(exception));
+    }
+
     /**
      * Check if this request generated exceptions.
      *
@@ -80,6 +86,12 @@ public class OXOResponse extends HttpServletResponseWrapper
     public void addNotification(Notification notification)
     {
         this.notifications.add(notification);
+    }
+
+    // For convenience...
+    public void addNotification(String notification)
+    {
+        this.notifications.add(new Notification(notification));
     }
 
     /**
