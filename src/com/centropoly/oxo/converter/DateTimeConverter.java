@@ -21,9 +21,7 @@ public class DateTimeConverter implements Converter
     {
         DateTime dateTime = (DateTime) object;
         
-        writer.startNode("dateTime");
         writer.setValue(dateTime.toString(ISODateTimeFormat.dateTimeNoMillis()));
-        writer.endNode();
     }
 
     @Override

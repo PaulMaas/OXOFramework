@@ -47,4 +47,14 @@ public final class Formatter
     {
         return new DateTime(date).toString(DateTimeFormat.fullDate().withLocale(OXOContext.getUser().getPreferences().getLocale()));
     }
+    
+    public static String toLowerCase(String string)
+    {
+        return string.toLowerCase();
+    }
+    
+    public static String toUpperCase(String string)
+    {
+        return string.toUpperCase();
+    }
 }
