@@ -45,7 +45,7 @@ public final class Client
 
     public Cookie[] getCookies()
     {
-        return (request.getCookies() != null) ? request.getCookies() : new Cookie[] {};
+        return (request.getCookies() != null) ? request.getCookies() : new Cookie[0];
     }
     
     public Cookie getCookie(String name)

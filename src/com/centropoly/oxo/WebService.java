@@ -23,10 +23,14 @@ import org.xml.sax.helpers.XMLReaderFactory;
 public abstract class WebService extends OXOServlet
 {
     private boolean responseAsJSON = false;
-    private String jsonXslTemplate = "template:/xmltojsonml.xsl";
+    private JsonOutputType jsonOutputType = JsonOutputType.JSON;
+
+    private String jsonXslTemplate = "template:/xmltojson.xsl"; // Requires an XSLT 2.0 Processor. Saxon is hard-coded into this class and thus is a dependency if this stylesheet is used (jsonOutputType = JSON).
+    private String jsonmlXslTemplate = "template:/xmltojsonml.xsl";
 
     @Override
-    protected void initialize(OXORequest request, OXOResponse response) {
+    protected void initialize(OXORequest request, OXOResponse response)
+    {
         super.initialize(request, response);
 
         // Providing a default for the response output type.
@@ -75,6 +79,10 @@ public abstract class WebService extends OXOServlet
             OXOEntityResolver entityResolver = new OXOEntityResolver("com.centropoly.oxo.templates", null);
 
             String xslTemplate = this.jsonXslTemplate;
+            if (this.jsonOutputType == JsonOutputType.JSONML)
+            {
+                xslTemplate = this.jsonmlXslTemplate;
+            }
 
             // Retrieve the Json XSL template.
             InputSource inputSource = entityResolver.resolveEntity(null, xslTemplate);
@@ -88,7 +96,15 @@ public abstract class WebService extends OXOServlet
             SAXSource xmlSource = new SAXSource(xmlReader, new InputSource(in));
             
             // Create a transformer.
-            TransformerFactory transformerFactory = TransformerFactory.newInstance();
+            TransformerFactory transformerFactory;
+            if (this.jsonOutputType == JsonOutputType.JSON)
+            {
+               transformerFactory = TransformerFactory.newInstance("net.sf.saxon.TransformerFactoryImpl", null);
+            }
+            else
+            {
+                transformerFactory = TransformerFactory.newInstance();
+            }
             transformerFactory.setErrorListener(new OXOErrorListener());
 
             try {
@@ -124,7 +140,8 @@ public abstract class WebService extends OXOServlet
     }
 
     @Override
-    protected void outputResponse(OXOResponse response) throws IOException, SAXException, TransformerException {
+    protected void outputResponse(OXOResponse response) throws IOException, SAXException, TransformerException
+    {
         if (this.responseAsJSON) {
             this.outputResponseAsJSON(response);
         } else {
@@ -142,5 +159,28 @@ public abstract class WebService extends OXOServlet
     
     public void setResponseAsJSON(boolean responseAsJSON) {
         this.responseAsJSON = responseAsJSON;
+    }
+    
+    public void setJsonOutputType(JsonOutputType jsonOutputType)
+    {
+        this.jsonOutputType = jsonOutputType;
+    }
+
+    public enum JsonOutputType
+    {
+        JSONML ("jsonml"),
+        JSON ("json");
+
+        private final String value;
+
+        JsonOutputType(String value)
+        {
+            this.value = value;
+        }
+        
+        @Override
+        public String toString() {
+            return this.value;
+        }
     }
 }

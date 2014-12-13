@@ -22,14 +22,17 @@ public class ClientConverter implements Converter
         Client client = (Client) object;
 
         writer.startNode("cookies");
-        for (Cookie cookie : client.getCookies())
+        if (client.getCookies() != null)
         {
-            writer.startNode("cookie");
-            writer.addAttribute("name", cookie.getName());
-            writer.startNode("value");
-            writer.setValue(cookie.getValue());
-            writer.endNode();
-            writer.endNode();
+            for (Cookie cookie : client.getCookies())
+            {
+                writer.startNode("cookie");
+                writer.addAttribute("name", cookie.getName());
+                writer.startNode("value");
+                writer.setValue(cookie.getValue());
+                writer.endNode();
+                writer.endNode();
+            }
         }
         writer.endNode();
         
