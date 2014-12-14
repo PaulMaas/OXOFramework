@@ -1,4 +1,4 @@
-package com.centropoly.oxo.converter;
+package com.centropoly.oxo.converters;
 
 import com.centropoly.oxo.OXOResponse;
 import com.centropoly.oxo.OXOResponse.Notification;
@@ -41,7 +41,7 @@ public class OXOResponseConverter implements Converter
             if (exception instanceof RequestParameterException)
             {
                 writer.startNode("parameterName");
-                writer.setValue(((RequestParameterException)exception).getParameterName());
+                writer.setValue(((RequestParameterException) exception).getParameterName());
                 writer.endNode();
             }
             writer.startNode("message");
@@ -50,7 +50,7 @@ public class OXOResponseConverter implements Converter
             writer.endNode();
         }
         writer.endNode();
-        
+
         writer.startNode("data");
         if (response.getData() != null)
         {

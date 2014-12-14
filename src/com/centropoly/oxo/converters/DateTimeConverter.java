@@ -1,4 +1,4 @@
-package com.centropoly.oxo.converter;
+package com.centropoly.oxo.converters;
 
 import com.thoughtworks.xstream.converters.Converter;
 import com.thoughtworks.xstream.converters.MarshallingContext;
@@ -19,6 +19,7 @@ public class DateTimeConverter implements Converter
     @Override
     public void marshal(Object object, HierarchicalStreamWriter writer, MarshallingContext context)
     {
+        @SuppressWarnings("unchecked")
         DateTime dateTime = (DateTime) object;
         
         writer.setValue(dateTime.toString(ISODateTimeFormat.dateTimeNoMillis()));

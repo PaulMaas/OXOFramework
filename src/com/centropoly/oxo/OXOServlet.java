@@ -1,10 +1,10 @@
 package com.centropoly.oxo;
 
-import com.centropoly.oxo.converter.OXOResponseConverter;
-import com.centropoly.oxo.converter.OXORequestConverter;
-import com.centropoly.oxo.converter.ClientConverter;
-import com.centropoly.oxo.converter.DateTimeConverter;
-import com.centropoly.oxo.converter.LocaleConverter;
+import com.centropoly.oxo.converters.OXOResponseConverter;
+import com.centropoly.oxo.converters.OXORequestConverter;
+import com.centropoly.oxo.converters.ClientConverter;
+import com.centropoly.oxo.converters.DateTimeConverter;
+import com.centropoly.oxo.converters.LocaleConverter;
 import com.thoughtworks.xstream.XStream;
 import com.thoughtworks.xstream.io.xml.DomDriver;
 import com.thoughtworks.xstream.io.xml.TraxSource;

@@ -1,6 +1,6 @@
 package com.centropoly.oxo;
 
-import com.centropoly.oxo.converter.LocaleConverter;
+import com.centropoly.oxo.converters.LocaleConverter;
 import com.thoughtworks.xstream.annotations.XStreamConverter;
 import java.io.Serializable;
 import java.util.Locale;

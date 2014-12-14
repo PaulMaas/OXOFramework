@@ -1,4 +1,4 @@
-package com.centropoly.oxo.converter;
+package com.centropoly.oxo.converters;
 
 import com.centropoly.oxo.OXORequest;
 import com.thoughtworks.xstream.converters.Converter;
@@ -20,6 +20,7 @@ public class OXORequestConverter implements Converter
     @Override
     public void marshal(Object object, HierarchicalStreamWriter writer, MarshallingContext context)
     {
+        @SuppressWarnings("unchecked")
         OXORequest request = (OXORequest) object;
         Map parameterMap = request.getParameterMap();
 

@@ -1,4 +1,4 @@
-package com.centropoly.oxo.converter;
+package com.centropoly.oxo.converters;
 
 import com.centropoly.oxo.OXOContext;
 import com.thoughtworks.xstream.converters.Converter;
@@ -19,6 +19,7 @@ public class LocaleConverter implements Converter
     @Override
     public void marshal(Object object, HierarchicalStreamWriter writer, MarshallingContext context)
     {
+        @SuppressWarnings("unchecked")
         Locale locale = (Locale) object;
         
         writer.startNode("languageCode");
