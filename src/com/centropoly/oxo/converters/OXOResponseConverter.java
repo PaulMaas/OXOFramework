@@ -20,6 +20,7 @@ public class OXOResponseConverter implements Converter
     @Override
     public void marshal(Object object, HierarchicalStreamWriter writer, MarshallingContext context)
     {
+        @SuppressWarnings("unchecked")
         OXOResponse response = (OXOResponse) object;
 
         writer.startNode("notifications");
@@ -45,7 +46,10 @@ public class OXOResponseConverter implements Converter
                 writer.endNode();
             }
             writer.startNode("message");
-            writer.setValue(exception.getMessage());
+            if (exception.getMessage() != null)
+            {
+                writer.setValue(exception.getMessage());
+            }
             writer.endNode();
             writer.endNode();
         }
