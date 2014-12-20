@@ -28,6 +28,11 @@ public final class Formatter
         return NumberFormat.getCurrencyInstance(OXOContext.getUser().getPreferences().getLocale()).format(currency);
     }
     
+    public static String formatDateTime(String dateTime, String pattern)
+    {
+        return new DateTime(dateTime).toString(DateTimeFormat.forPattern(pattern).withLocale(OXOContext.getUser().getPreferences().getLocale()));
+    }
+    
     public static String formatShortDate(String date)
     {
         return new DateTime(date).toString(DateTimeFormat.shortDate().withLocale(OXOContext.getUser().getPreferences().getLocale()));

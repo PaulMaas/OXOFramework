@@ -51,9 +51,12 @@ public class OXORequestConverter implements Converter
             String[] values = (String[]) entry.getValue();
             for (int i = 0; i < values.length; i++)
             {
-                writer.startNode("value");
-                writer.setValue(values[i]);
-                writer.endNode();
+                if (values[i] != null)
+                {
+                    writer.startNode("value");
+                    writer.setValue(values[i]);
+                    writer.endNode();
+                }
             }
             writer.endNode();
         }
