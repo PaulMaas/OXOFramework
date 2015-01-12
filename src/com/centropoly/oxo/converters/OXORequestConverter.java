@@ -25,7 +25,10 @@ public class OXORequestConverter implements Converter
         Map parameterMap = request.getParameterMap();
 
         writer.startNode("user");
-        context.convertAnother(request.getUser());
+        if (request.getUser() != null)
+        {
+            context.convertAnother(request.getUser());
+        }
         writer.endNode();
         
         writer.startNode("contextPath");

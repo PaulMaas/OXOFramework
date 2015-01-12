@@ -25,27 +25,27 @@ public final class Client
 
     public String getAddress()
     {
-        return request.getRemoteAddr();
+        return this.request.getRemoteAddr();
     }
 
     public String getHost()
     {
-        return request.getRemoteHost();
+        return this.request.getRemoteHost();
     }
 
     public Locale getLocale()
     {
-        return request.getLocale();
+        return this.request.getLocale();
     }
 
     public HttpSession getSession()
     {
-        return request.getSession();
+        return this.request.getSession();
     }
 
     public Cookie[] getCookies()
     {
-        return (request.getCookies() != null) ? request.getCookies() : new Cookie[0];
+        return (this.request.getCookies() != null) ? this.request.getCookies() : new Cookie[0];
     }
     
     public Cookie getCookie(String name)

@@ -24,7 +24,8 @@ public class OXORequest extends HttpServletRequestWrapper
         this.dynamicParameters = new HashMap<String, String[]>();
     }
     
-    public User getUser() {
+    public User getUser()
+    {
         return OXOContext.getUser();
     }
     
