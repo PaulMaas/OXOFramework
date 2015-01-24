@@ -22,10 +22,11 @@ public class ClientConverter implements Converter
         @SuppressWarnings("unchecked")
         Client client = (Client) object;
 
-        writer.startNode("cookies");
-        if (client.getCookies() != null)
+        Cookie[] cookies = client.getCookies();
+        if (cookies != null)
         {
-            for (Cookie cookie : client.getCookies())
+            writer.startNode("cookies");
+            for (Cookie cookie : cookies)
             {
                 writer.startNode("cookie");
                 writer.addAttribute("name", cookie.getName());
@@ -34,9 +35,9 @@ public class ClientConverter implements Converter
                 writer.endNode();
                 writer.endNode();
             }
+            writer.endNode();
         }
-        writer.endNode();
-        
+
         writer.startNode("locale");
         context.convertAnother(client.getLocale(), new LocaleConverter());
         writer.endNode();

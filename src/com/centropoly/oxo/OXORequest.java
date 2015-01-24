@@ -31,7 +31,7 @@ public class OXORequest extends HttpServletRequestWrapper
     
     public URI getURI() throws URISyntaxException
     {
-        return new URI(getServletPath() + ((getQueryString() != null) ? "?" + getQueryString() : ""));
+        return new URI(getRequestURI() + ((getQueryString() != null) ? "?" + getQueryString() : ""));
     }
 
     /**

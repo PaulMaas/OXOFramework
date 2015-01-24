@@ -14,8 +14,8 @@ import javax.servlet.http.HttpSession;
  */
 public final class Client
 {
-    private OXORequest request;
-    private OXOResponse response;
+    private final OXORequest request;
+    private final OXOResponse response;
 
     public Client(OXORequest request, OXOResponse response)
     {
@@ -45,7 +45,7 @@ public final class Client
 
     public Cookie[] getCookies()
     {
-        return (this.request.getCookies() != null) ? this.request.getCookies() : new Cookie[0];
+        return this.request.getCookies();
     }
     
     public Cookie getCookie(String name)

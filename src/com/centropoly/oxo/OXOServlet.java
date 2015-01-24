@@ -105,7 +105,8 @@ public abstract class OXOServlet extends HttpServlet
             }
 
             // Print the XML generated for debugging purposes.
-            if (this.getServletContext().getInitParameter("debug") != null && Boolean.valueOf(this.getServletContext().getInitParameter("debug"))) {
+            if (this.getServletContext().getInitParameter("debug") != null && Boolean.valueOf(this.getServletContext().getInitParameter("debug")))
+            {
                 System.out.println(xStream.toXML(response));
             }
 
@@ -286,12 +287,22 @@ public abstract class OXOServlet extends HttpServlet
         }
     }
     
-    protected void outputException(OXOResponse response, Exception exception) throws IOException {
+    protected void outputException(OXOResponse response, Exception exception) throws IOException
+    {
+        // Only set it if it hasn't already been set...
+        if (response.getStatus() == 0 || response.getStatus() == 200)
+        {
+            response.setStatus(500);
+        }
+
         PrintWriter out = new PrintWriter(response.getOutputStream());
         out.println("An exception was encountered:");
         out.println(exception.getMessage());
         out.println();
-        exception.printStackTrace(out);
+        if (this.getServletContext().getInitParameter("debug") != null && Boolean.valueOf(this.getServletContext().getInitParameter("debug")))
+        {
+            exception.printStackTrace(out);
+        }
         out.close();
     }
 
