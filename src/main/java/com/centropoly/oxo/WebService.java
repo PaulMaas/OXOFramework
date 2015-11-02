@@ -8,6 +8,7 @@ import java.lang.Thread.UncaughtExceptionHandler;
 import javax.xml.transform.Transformer;
 import javax.xml.transform.TransformerException;
 import javax.xml.transform.TransformerFactory;
+import javax.xml.transform.TransformerFactoryConfigurationError;
 import javax.xml.transform.sax.SAXSource;
 import javax.xml.transform.stream.StreamResult;
 import org.xml.sax.InputSource;
@@ -94,12 +95,18 @@ public abstract class WebService extends OXOServlet
             // Create the SAXSource objects.
             SAXSource xslSource = new SAXSource(xmlReader, inputSource);
             SAXSource xmlSource = new SAXSource(xmlReader, new InputSource(in));
-            
+
             // Create a transformer.
             TransformerFactory transformerFactory;
             if (this.jsonOutputType == JsonOutputType.JSON)
             {
-               transformerFactory = TransformerFactory.newInstance("net.sf.saxon.TransformerFactoryImpl", null);
+                // The Saxon (HE) library by Saxonica must be included as a project dependency when outputting JSON.
+                // It is required to make the transformation from XML to JSON.
+                try {
+                    transformerFactory = TransformerFactory.newInstance("net.sf.saxon.TransformerFactoryImpl", null);
+                } catch(TransformerFactoryConfigurationError error) {
+                    throw new TransformerException("The Saxon (HE) library is required to transform XML to JSON. Please make sure it is included as a project dependency.", error);
+                }
             }
             else
             {
