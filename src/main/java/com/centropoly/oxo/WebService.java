@@ -1,7 +1,7 @@
 package com.centropoly.oxo;
 
-import com.centropoly.oxo.OXOResponse.TransformationOutputType;
 import java.io.IOException;
+import java.io.OutputStream;
 import java.io.PipedInputStream;
 import java.io.PipedOutputStream;
 import java.lang.Thread.UncaughtExceptionHandler;
@@ -21,7 +21,7 @@ import org.xml.sax.helpers.XMLReaderFactory;
  * 
  * @author Paul van der Maas
  */
-public abstract class WebService extends OXOServlet
+public abstract class WebService extends CachingOXOServlet
 {
     private boolean responseAsJSON = false;
     private JsonOutputType jsonOutputType = JsonOutputType.JSON;
@@ -30,45 +30,76 @@ public abstract class WebService extends OXOServlet
     private String jsonmlXslTemplate = "template:/xmltojsonml.xsl";
 
     @Override
-    protected void initialize(OXORequest request, OXOResponse response)
+    protected void init(OXORequest request, OXOResponse response)
     {
-        super.initialize(request, response);
+        super.init(request, response);
 
-        // Providing a default for the response output type.
-        response.setTransformationOutputType(TransformationOutputType.XML);
+        // By default, for a web service, the response is not transformed.
+        // It is a plain object to XML conversion. However, the output may
+        // still be converted to JSON.
+        response.setTransformationOutputType(null);
     }
 
-    protected void outputResponseAsJSON(final OXOResponse response) throws IOException, SAXException, TransformerException {
+    @Override
+    protected void outputResponse(OXORequest request, OXOResponse response, OutputStream outputStream) throws IOException, SAXException, TransformerException, ReflectiveOperationException
+    {
+        if (this.responseAsJSON)
+        {
+            outputResponseAsJSON(request, response, outputStream);
+        }
+        else
+        {
+            super.outputResponse(request, response, outputStream);
+        }
+    }
+    
+    protected void outputPipedResponse(OXORequest request, OXOResponse response, PipedOutputStream outputStream) throws IOException, SAXException, TransformerException, ReflectiveOperationException
+    {
+        super.outputResponse(request, response, outputStream);
+    }
+
+    protected void outputResponseAsJSON(final OXORequest request, final OXOResponse response, OutputStream outputStream) throws IOException, SAXException, TransformerException
+    {
         // We can only transform transformed XML or untransformed XML to JSON, hence the following requirement.
-        if (response.getTransformationOutputType() == null || response.getTransformationOutputType() == OXOResponse.TransformationOutputType.XML) {
-            PipedInputStream in = new PipedInputStream();
-            final PipedOutputStream out = new PipedOutputStream(in);
+        if (response.getTransformationOutputType() == null || response.getTransformationOutputType() == OXOResponse.TransformationOutputType.XML)
+        {
+            PipedInputStream pipedInputStream = new PipedInputStream();
+            final PipedOutputStream pipedOutputStream = new PipedOutputStream(pipedInputStream);
 
             // To prevent deadlock, we have to perform the piping in another thread.
-            Runnable runner = new Runnable() {
+            Runnable runner = new Runnable()
+            {
                 @Override
-                public void run() {
-                    try {
-                        outputResponse(response, out);
-                    } catch (Exception exception) {
+                public void run()
+                {
+                    try
+                    {
+                        outputPipedResponse(request, response, pipedOutputStream);
+                    }
+                    catch (IOException | SAXException | TransformerException | ReflectiveOperationException exception)
+                    {
                         throw new RuntimeException(exception);
-                    } finally {
-                        try {
-                            out.close();
-                        } catch (IOException exception) {
+                    }
+                    finally
+                    {
+                        try
+                        {
+                            pipedOutputStream.close();
+                        }
+                        catch (IOException exception)
+                        {
                             throw new RuntimeException(exception);
                         }
                     }
                 }
             };
             
-            UncaughtExceptionHandler uncaughtExceptionHandler = new Thread.UncaughtExceptionHandler() {
+            UncaughtExceptionHandler uncaughtExceptionHandler = new Thread.UncaughtExceptionHandler()
+            {
                 @Override
-                public void uncaughtException(Thread thread, Throwable throwable) {
-                    try {
-                        outputException(response, new Exception(throwable));
-                    } catch (IOException exception) {
-                    }
+                public void uncaughtException(Thread thread, Throwable throwable)
+                {
+                    outputException(response, new Exception(throwable));
                 }
             };
 
@@ -94,7 +125,7 @@ public abstract class WebService extends OXOServlet
 
             // Create the SAXSource objects.
             SAXSource xslSource = new SAXSource(xmlReader, inputSource);
-            SAXSource xmlSource = new SAXSource(xmlReader, new InputSource(in));
+            SAXSource xmlSource = new SAXSource(xmlReader, new InputSource(pipedInputStream));
 
             // Create a transformer.
             TransformerFactory transformerFactory;
@@ -102,9 +133,12 @@ public abstract class WebService extends OXOServlet
             {
                 // The Saxon (HE) library by Saxonica must be included as a project dependency when outputting JSON.
                 // It is required to make the transformation from XML to JSON.
-                try {
+                try
+                {
                     transformerFactory = TransformerFactory.newInstance("net.sf.saxon.TransformerFactoryImpl", null);
-                } catch(TransformerFactoryConfigurationError error) {
+                }
+                catch(TransformerFactoryConfigurationError error)
+                {
                     throw new TransformerException("The Saxon (HE) library is required to transform XML to JSON. Please make sure it is included as a project dependency.", error);
                 }
             }
@@ -114,7 +148,8 @@ public abstract class WebService extends OXOServlet
             }
             transformerFactory.setErrorListener(new OXOErrorListener());
 
-            try {
+            try
+            {
                 Transformer transformer = transformerFactory.newTransformer(xslSource);
 
                 String mediaType = transformer.getOutputProperty("media-type");
@@ -136,38 +171,35 @@ public abstract class WebService extends OXOServlet
                 response.setCharacterEncoding(encoding);
 
                 // Transform the XML to JSON.
-                transformer.transform(xmlSource, new StreamResult(response.getOutputStream()));
-            } catch (TransformerException exception) {
+                transformer.transform(xmlSource, new StreamResult(outputStream));
+            }
+            catch (TransformerException exception)
+            {
                 // Wrap the exception to add additional information.
                 throw new TransformerException(exception.getMessage() + " The JSON stylesheet may contain an error: " + xslTemplate + ".", exception);
             }
-        } else {
+        }
+        else
+        {
             throw new TransformerException("Only XML can be transformed to JSON. The response's output type was set to " + response.getTransformationOutputType());
         }
     }
-
-    @Override
-    protected void outputResponse(OXOResponse response) throws IOException, SAXException, TransformerException
-    {
-        if (this.responseAsJSON) {
-            this.outputResponseAsJSON(response);
-        } else {
-            super.outputResponse(response);
-        }
-    }
     
-    public boolean responseAsJSON() {
+    public boolean responseAsJSON()
+    {
         return this.responseAsJSON;
     }
     
-    public void setResponseAsJSON() {
+    public void setResponseAsJSON()
+    {
         setResponseAsJSON(true);
     }
     
-    public void setResponseAsJSON(boolean responseAsJSON) {
+    public void setResponseAsJSON(boolean responseAsJSON)
+    {
         this.responseAsJSON = responseAsJSON;
     }
-    
+
     public void setJsonOutputType(JsonOutputType jsonOutputType)
     {
         this.jsonOutputType = jsonOutputType;
@@ -186,7 +218,8 @@ public abstract class WebService extends OXOServlet
         }
         
         @Override
-        public String toString() {
+        public String toString()
+        {
             return this.value;
         }
     }

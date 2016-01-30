@@ -11,11 +11,11 @@ import javax.servlet.http.HttpServletResponseWrapper;
 public class OXOResponse extends HttpServletResponseWrapper
 {
     private TransformationOutputType transformationOutputType = null;
-    
+
     private List<Exception> exceptions;
     private List<Notification> notifications;
 
-    private Object data = null;
+    private Data data = null;
 
     public OXOResponse(HttpServletResponse response)
     {
@@ -24,13 +24,13 @@ public class OXOResponse extends HttpServletResponseWrapper
         this.exceptions = new ArrayList<Exception>();
         this.notifications = new ArrayList<Notification>();
     }
-    
-    public void setData(Object data) {
+
+    public void setData(Data data) {
         this.data = data;
     }
     
-    public Object getData() {
-        return this.data;
+    public Data getData() {
+        return data;
     }
 
     public OXORequest getRequest() {
@@ -42,7 +42,7 @@ public class OXOResponse extends HttpServletResponseWrapper
     }
     
     public TransformationOutputType getTransformationOutputType() {
-        return this.transformationOutputType;
+        return transformationOutputType;
     }
 
     public List<Exception> getExceptions()
@@ -53,7 +53,7 @@ public class OXOResponse extends HttpServletResponseWrapper
     /**
      * Add an exception. No action is taken, except to store the exception.
      * Any exceptions that are stores in the request object indicate that there was something
-     * wrong with the client's request. Most likely, they did not complete a form correctly.
+     * wrong with the client's request. Most likely, they did not complete an action correctly.
      *
      * @param exception
      */

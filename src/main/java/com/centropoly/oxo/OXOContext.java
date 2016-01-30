@@ -4,7 +4,7 @@ package com.centropoly.oxo;
  * OXOContext is intended to be an easy access path to the most important parameters
  * needed in the OXO Framework. It is used by the frameworks inner parts, but can
  * also be used by the end-user to gain easy access to all the major parts
- * that make up the framework. It's state properties will be initialized very early
+ * that make up the framework. It's state properties will/should be initialized very early
  * on in the request/response cycle so that availability of the data is guaranteed.
  * 
  * This class is intended to only have static methods and as such should not be
@@ -24,6 +24,9 @@ public class OXOContext
     private static String templatesPackage = null;
     private static String propertiesPackage = null;
     private static String servletsPackage = null;
+    
+    private static boolean debug = false;
+    private static boolean cache = true;
 
     // Do not allow instantiation.
     protected OXOContext()
@@ -90,5 +93,25 @@ public class OXOContext
     public static void setResponse(OXOResponse response)
     {
         OXOContext.response = response;
+    }
+
+    public static boolean debug()
+    {
+        return debug;
+    }
+
+    public static void debug(boolean debug)
+    {
+        OXOContext.debug = debug;
+    }
+
+    public static boolean cache()
+    {
+        return cache;
+    }
+
+    public static void cache(boolean cache)
+    {
+        OXOContext.cache = cache;
     }
 }

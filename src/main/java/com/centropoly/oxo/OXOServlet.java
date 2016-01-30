@@ -11,6 +11,7 @@ import com.thoughtworks.xstream.io.xml.TraxSource;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.io.PrintWriter;
+import javax.servlet.ServletException;
 import javax.servlet.ServletOutputStream;
 import javax.servlet.http.HttpServlet;
 import javax.servlet.http.HttpServletRequest;
@@ -20,6 +21,7 @@ import javax.xml.transform.TransformerException;
 import javax.xml.transform.TransformerFactory;
 import javax.xml.transform.sax.SAXSource;
 import javax.xml.transform.stream.StreamResult;
+import org.joda.time.DateTime;
 import org.xml.sax.InputSource;
 import org.xml.sax.SAXException;
 import org.xml.sax.XMLReader;
@@ -40,85 +42,216 @@ import org.xml.sax.helpers.XMLReaderFactory;
 public abstract class OXOServlet extends HttpServlet
 {
     /**
-     * This method should be overridden to do any servlet-specific initialization.
+     * This method is called only once when a servlet is being put into service 
+     * and can be used to perform 'global' servlet initialization tasks.
+     * 
+     * Overriding implementations of this method must call the super implementation
+     * first.
+     * 
+     * This is a good place for (abstract) sub implementations of OXOServlet
+     * to set defaults that do not depend on request parameters.
+     */
+    @Override
+    public void init()
+    {
+        // For the OXO Framework to function properly a few parameters need
+        // to be set in the deployment descriptor (web.xml). The following
+        // logic will load these parameters into OXOContext and fail if they cannot be located.
+
+        String templatesPackage = this.getServletContext().getInitParameter("templatesPackage");
+        if (templatesPackage == null)
+        {
+            throw new NullPointerException("The templatesPackage context parameter is undefined! This context parameter needs to be defined in the deployment descriptor for the OXO Framework to function properly.");
+        }
+        else
+        {
+            OXOContext.setTemplatesPackage(templatesPackage);
+        }
+
+        String propertiesPackage = this.getServletContext().getInitParameter("propertiesPackage");
+        if (propertiesPackage == null)
+        {
+            throw new NullPointerException("The propertiesPackage context parameter is undefined! This context parameter needs to be defined in the deployment descriptor for the OXO Framework to function properly.");
+        }
+        else
+        {
+            OXOContext.setPropertiesPackage(propertiesPackage);
+        }
+
+        String servletsPackage = this.getServletContext().getInitParameter("servletsPackage");
+        if (servletsPackage == null)
+        {
+            throw new NullPointerException("The servletsPackage context parameter is undefined! This context parameter needs to be defined in the deployment descriptor for the OXO Framework to function properly.");
+        }
+        else
+        {
+            OXOContext.setServletsPackage(servletsPackage);
+        }
+        
+        // These are optional, but can be set as environment variables or in the deployment descriptor.
+        
+        String debug = System.getProperty("DEBUG", this.getServletContext().getInitParameter("debug"));
+        if (debug != null) {
+            OXOContext.debug(Boolean.parseBoolean(debug));
+        }
+        
+        String cache = System.getProperty("CACHE", this.getServletContext().getInitParameter("cache"));
+        if (debug != null) {
+            OXOContext.cache(Boolean.parseBoolean(cache));
+        }
+    }
+
+    /**
+     * This method is called once per request/response cycle and can be used to
+     * perform 'local' servlet initialization tasks.
+     * 
+     * Overriding implementations of this method must call the super implementation
+     * first.
+     * 
+     * This is a good place for (abstract) sub implementations of OXOServlet
+     * to set defaults that depend on request parameters.
      * 
      * @param request
      * @param response
      */
-    protected void initialize(OXORequest request, OXOResponse response) {}
+    protected void init(OXORequest request, OXOResponse response)
+    {
+        if (OXOContext.debug()) System.out.println("init(request, response) " + request.getServletPath());
+
+        // Set all contextual information needed by the
+        // OXO Framework into OXOContext.
+        OXOContext.setRequest(request);
+        OXOContext.setResponse(response);
+        OXOContext.setUser(new User(new Client(request, response)));
+    }
     
     /**
      * Executes operation(s) determined by the properties of the request object.
      * 
      * Input that may change which resource is generated and (how it is) returned should be handled at this level.
-     * Input that may change the resource internally is typically handled in the constructor
+     * Input that may change the resource internally is typically handled in the build method
      * of the data object representing the resource.
      * 
-     * Either way, this method should (normally) create a data object and attach it to the response.
+     * Either way, this method should (normally) tell the response what resources to generate and, possibly, how to return them.
      *
-     * @param request Contains information about the request which can be used to build the response's data object.
-     * @param response Should be loaded with a data object based on the request information.
+     * @param request Contains information about the request which should be used to tell the response how to generate and return resources.
+     * @param response Should be informed on how to respond to the request by calling the hooks provided.
      * @throws Exception An exception thrown here could not be handled internally. A general error page should be shown.
      */
     protected abstract void processRequest(OXORequest request, OXOResponse response) throws Exception;
-    
+
     /**
-     * Transform the response, then send the result back to the client.
-     * When called, all logic to generate the resource's data must have completed.
+     * Generate data for the response, then send the (transformed) result back to the client.
      *
+     * @param request
      * @param response
      * @throws SAXException
      * @throws IOException
-     * @throws javax.xml.transform.TransformerException
+     * @throws TransformerException
+     * @throws ReflectiveOperationException
      */
-    protected void outputResponse(OXOResponse response) throws IOException, SAXException, TransformerException
+    protected final void outputResponse(OXORequest request, OXOResponse response) throws IOException, SAXException, TransformerException, ReflectiveOperationException
     {
-        outputResponse(response, response.getOutputStream());
-    }
-    
-    protected void outputResponse(OXOResponse response, OutputStream outputStream) throws IOException, SAXException, TransformerException {
-        Object data = response.getData();
-
-        // A committed response indicates that we should not try to generate the resource output.
+        // Only output response if the response is not committed yet.
+        // A committed response indicates that we should not try to generate the response output.
         // One case of this would be if the required action is a redirect or if output has been written
         // directly to the output stream for debugging or other purposes.
         if (!response.isCommitted())
         {
-            // Convert the response object into XML using XStream.
-            XStream xStream = new XStream(new DomDriver());
-            xStream.setMode(XStream.NO_REFERENCES);
-
-            xStream.registerConverter(new OXOResponseConverter());
-            xStream.registerConverter(new OXORequestConverter());
-            xStream.registerConverter(new ClientConverter(), XStream.PRIORITY_LOW);
-            xStream.registerConverter(new LocaleConverter());
-            xStream.registerConverter(new DateTimeConverter());
-            xStream.aliasType("response", OXOResponse.class);
-
-            if (data != null)
+            Data data = response.getData();
+            String method = request.getMethod();
+            
+            if (OXOContext.cache() && data != null && method.equals("GET"))
             {
-                // In case the data object is a non-static inner class, this will
-                // omit the reference to the outer class.
-                xStream.omitField(data.getClass(), "this$0");
-                
-                xStream.processAnnotations(data.getClass());
-            }
+                // Check if the client can use its cached version of the response.
+                DateTime dateTimeLastModified = data.getDateTimeLastModified();
+                if (dateTimeLastModified != null)
+                {
+                    // Check if the client's version needs to be updated by checking
+                    // if the last modified date/time is greater than or equal to the
+                    // client's version's date/time.
+                    long ifModifiedSince = request.getDateHeader("If-Modified-Since");
+                    if (ifModifiedSince >= dateTimeLastModified.getMillis())
+                    {
+                        // Use client's cache.
+                        if (OXOContext.debug()) System.out.println("Use client's cache.");
+                        response.setStatus(HttpServletResponse.SC_NOT_MODIFIED);
+                    }
+                    else
+                    {
+                        // Update client's cache.
+                        if (OXOContext.debug()) System.out.println("Update client's cache.");
+                        response.setDateHeader("Last-Modified", dateTimeLastModified.getMillis());
 
-            // Print the XML generated for debugging purposes.
-            if (this.getServletContext().getInitParameter("debug") != null && Boolean.valueOf(this.getServletContext().getInitParameter("debug")))
+                        outputResponse(request, response, response.getOutputStream());
+                    }
+                }
+                else
+                {
+                    // Don't use (client's) cache, no last modified information available.
+                    if (OXOContext.debug()) System.out.println("Update client's cache.");
+
+                    outputResponse(request, response, response.getOutputStream());
+                }
+            }
+            else
             {
-                System.out.println(xStream.toXML(response));
-            }
-
-            // Write output to the given outputstream transformed or untransformed.
-            if (response.getTransformationOutputType() != null) {
-                transformOutputResponse(response, outputStream, xStream);
-            } else {
-                outputResponse(response, outputStream, xStream);
+                outputResponse(request, response, response.getOutputStream());
             }
         }
     }
-    
+
+    protected void outputResponse(OXORequest request, OXOResponse response, OutputStream outputStream) throws IOException, SAXException, TransformerException, ReflectiveOperationException
+    {
+        Data data = response.getData();
+
+        if (data != null)
+        {
+            // Build out the data object.
+            try
+            {
+                response.getData().build(request, response);
+            }
+            catch(Exception exception)
+            {
+                outputException(response, new Exception("An unhandled exception occurred while building the response data.", exception));
+            }
+        }
+
+        // Convert the response object into XML using XStream.
+        XStream xStream = new XStream(new DomDriver());
+        xStream.setMode(XStream.NO_REFERENCES);
+
+        xStream.registerConverter(new OXOResponseConverter());
+        xStream.registerConverter(new OXORequestConverter());
+        xStream.registerConverter(new ClientConverter(), XStream.PRIORITY_LOW);
+        xStream.registerConverter(new LocaleConverter());
+        xStream.registerConverter(new DateTimeConverter());
+        xStream.aliasType("response", OXOResponse.class);
+
+        if (data != null)
+        {
+            // In case the data object is a non-static inner class, this will
+            // omit the reference to the outer class.
+            xStream.omitField(data.getClass(), "this$0");
+
+            xStream.processAnnotations(data.getClass());
+        }
+
+        // Print the XML generated for debugging purposes.
+        //if (OXOContext.debug()) System.out.println(xStream.toXML(response));
+
+        // Write output to the given outputstream transformed or untransformed.
+        if (response.getTransformationOutputType() != null)
+        {
+            transformOutputResponse(response, outputStream, xStream);
+        }
+        else
+        {
+            outputResponse(response, outputStream, xStream);
+        }
+    }
+
     /**
      * Output the response as XML without transformation to the given
      * OutputStream. This method is for internal use.
@@ -128,13 +261,46 @@ public abstract class OXOServlet extends HttpServlet
      * @param xStream 
      * @throws java.io.IOException
      */
-    protected void outputResponse(OXOResponse response, OutputStream outputStream, XStream xStream) throws IOException {
+    protected void outputResponse(OXOResponse response, OutputStream outputStream, XStream xStream) throws IOException
+    {
+        // TODO: This seems kind of strange... how/why are we setting these headers this way.
+        // TODO: Why do we need to check ouputstream's type? Needs to be documented here.
         // Only set the content headers if we are outputting to a servlet output stream.
-        if (outputStream instanceof ServletOutputStream) {
+        if (outputStream instanceof ServletOutputStream)
+        {
             response.setContentType("text/xml");
             response.setCharacterEncoding("UTF-8");
         }
         xStream.toXML(response, outputStream);
+    }
+
+    protected void outputException(OXOResponse response, Exception exception)
+    {
+        // Only set it if it hasn't already been set...
+        if (response.getStatus() == 0 || response.getStatus() == HttpServletResponse.SC_OK)
+        {
+            response.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
+        }
+
+        try
+        {
+            System.out.println(exception.getMessage());
+            System.out.println();
+            exception.printStackTrace(System.out);
+
+            // Must wrap the output stream here instead of getting the print
+            // writer directly since data may have already been written to it.
+            PrintWriter out = new PrintWriter(response.getOutputStream());
+            out.println("An exception was encountered:");
+            out.println(exception.getMessage());
+            out.println();
+            if (OXOContext.debug()) exception.printStackTrace(out);
+            out.close();
+        }
+        catch(IOException unhandledException)
+        {
+            unhandledException.printStackTrace();
+        }
     }
     
     /**
@@ -147,18 +313,16 @@ public abstract class OXOServlet extends HttpServlet
      * @throws java.io.IOException
      * @throws org.xml.sax.SAXException
      */
-    protected void transformOutputResponse(OXOResponse response, OutputStream outputStream, XStream xStream) throws IOException, SAXException, TransformerException {
-        Object data = response.getData();
-
+    protected void transformOutputResponse(OXOResponse response, OutputStream outputStream, XStream xStream) throws IOException, SAXException, TransformerException
+    {
         // Create an entity resolver which will be used to resolve the root XSL template
         // as well as external entities referenced in the template itself.
         OXOEntityResolver entityResolver = new OXOEntityResolver(OXOContext.getTemplatesPackage(), OXOContext.getPropertiesPackage());
 
-        String canonicalClassName = data.getClass().getCanonicalName().toLowerCase();
+        String canonicalClassName = response.getData().getClass().getCanonicalName().toLowerCase();
         int dataIndex = canonicalClassName.lastIndexOf("data");
         canonicalClassName = (dataIndex == -1) ? canonicalClassName : canonicalClassName.substring(0, dataIndex);
-        
-        
+
         // Determine the XSL template to use in the transformation.
         StringBuilder stringBuilder = new StringBuilder("template:");
         stringBuilder.append(canonicalClassName.replaceFirst(OXOContext.getServletsPackage(), "").replace(".", "/"));
@@ -192,7 +356,8 @@ public abstract class OXOServlet extends HttpServlet
 
             // Only set the content headers if we are outputting the result
             // of the tranformation to a servlet output stream.
-            if (outputStream instanceof ServletOutputStream) {
+            if (outputStream instanceof ServletOutputStream)
+            {
                 String mediaType = transformer.getOutputProperty("media-type");
                 if (mediaType != null)
                 {
@@ -201,7 +366,7 @@ public abstract class OXOServlet extends HttpServlet
                 String encoding = transformer.getOutputProperty("encoding");
                 if (encoding != null)
                 {
-                    response.setCharacterEncoding(encoding);
+                    //response.setCharacterEncoding(encoding);
                 }
             }
 
@@ -215,120 +380,64 @@ public abstract class OXOServlet extends HttpServlet
     }
 
     /**
+     * Override service method to handle requests for both HTTP <code>GET</code>
+     * and <code>POST</code> methods.
+     * 
+     * This falls back on the super implementation for all other request methods.
+     *
+     * @param request
+     * @param response
+     * @throws javax.servlet.ServletException
+     * @throws java.io.IOException
+     */
+    @Override
+    protected void service(HttpServletRequest request, HttpServletResponse response) throws ServletException, IOException
+    {
+        if (OXOContext.debug()) System.out.println("service() " + request.getServletPath());
+
+        String method = request.getMethod();
+        if (method.equals("GET") || method.equals("POST"))
+        {
+            // Wrap the request and response.
+            OXORequest oxoRequest = new OXORequest(request);
+            OXOResponse oxoResponse = new OXOResponse(response);
+
+            // Perform request specific initialization.
+            init(oxoRequest, oxoResponse);
+
+            handleRequest(oxoRequest, oxoResponse);
+        }
+        else
+        {
+            // Fall back on super implementation for other request methods.
+            super.service(request, response);
+        }
+    }
+
+    /**
      * Handle requests for both HTTP <code>GET</code> and <code>POST</code> methods.
      *
      * @param request
      * @param response
      * @throws java.io.IOException
      */
-    protected void handleRequest(HttpServletRequest request, HttpServletResponse response) throws IOException
+    protected void handleRequest(OXORequest request, OXOResponse response) throws IOException
     {
-        // Wrap the request and response.
-        OXORequest oxoRequest = new OXORequest(request);
-        OXOResponse oxoResponse = new OXOResponse(response);
+        if (OXOContext.debug()) System.out.println("handleRequest() " + request.getServletPath());
 
         try
         {
-            // For the OXO Framework to function properly a few parameters need
-            // to be set in the deployment descriptor (web.xml). The following
-            // logic will load these parameters into OXOContext and fail if they cannot be located.
-
-            String templatesPackage = this.getServletContext().getInitParameter("templatesPackage");
-
-            if (templatesPackage == null)
-            {
-                throw new Exception("The templatesPackage context parameter is undefined! This context parameter needs to be defined in the deployment descriptor for the OXO Framework to function properly.");
-            }
-            else
-            {
-                OXOContext.setTemplatesPackage(templatesPackage);
-            }
-
-            String propertiesPackage = this.getServletContext().getInitParameter("propertiesPackage");
-
-            if (propertiesPackage == null)
-            {
-                throw new Exception("The propertiesPackage context parameter is undefined! This context parameter needs to be defined in the deployment descriptor for the OXO Framework to function properly.");
-            }
-            else
-            {
-                OXOContext.setPropertiesPackage(propertiesPackage);
-            }
-
-            String servletsPackage = this.getServletContext().getInitParameter("servletsPackage");
-
-            if (servletsPackage == null)
-            {
-                throw new Exception("The servletsPackage context parameter is undefined! This context parameter needs to be defined in the deployment descriptor for the OXO Framework to function properly.");
-            }
-            else
-            {
-                OXOContext.setServletsPackage(servletsPackage);
-            }
-
-            // Initialize all contextual information needed by the
-            // OXO Framework into OXOContext.
-            OXOContext.setRequest(oxoRequest);
-            OXOContext.setResponse(oxoResponse);
-            OXOContext.setUser(new User(new Client(oxoRequest, oxoResponse)));
+            // Process request/initialize response.
+            if (OXOContext.debug()) System.out.println("processRequest() " + request.getServletPath());
+            processRequest(request, response);
             
-            // Perform servlet specific initialization.
-            initialize(oxoRequest, oxoResponse);
-            
-            // Process request/load up response.
-            processRequest(oxoRequest, oxoResponse);
-
-            // Send the response.
-            outputResponse(oxoResponse);
+            // Output the (transformed) response.
+            if (OXOContext.debug()) System.out.println("outputResponse() " + request.getServletPath());
+            outputResponse(request, response);
         }
         catch (Exception exception)
         {
-            outputException(oxoResponse, exception);
+            outputException(response, exception);
         }
-    }
-    
-    protected void outputException(OXOResponse response, Exception exception) throws IOException
-    {
-        // Only set it if it hasn't already been set...
-        if (response.getStatus() == 0 || response.getStatus() == 200)
-        {
-            response.setStatus(500);
-        }
-
-        PrintWriter out = new PrintWriter(response.getOutputStream());
-        out.println("An exception was encountered:");
-        out.println(exception.getMessage());
-        out.println();
-        if (this.getServletContext().getInitParameter("debug") != null && Boolean.valueOf(this.getServletContext().getInitParameter("debug")))
-        {
-            exception.printStackTrace(out);
-        }
-        out.close();
-    }
-
-    /**
-     * Handles the HTTP <code>GET</code> method.
-     *
-     * @param request servlet request
-     * @param response servlet response
-     * @throws java.io.IOException
-     */
-    @Override
-    protected void doGet(HttpServletRequest request, HttpServletResponse response) throws IOException
-    {
-        handleRequest(request, response);
-    }
-
-    /**
-     * Handles the HTTP <code>POST</code> method.
-     *
-     * @param request servlet request
-     * @param response servlet response
-     * @throws java.io.IOException
-     */
-    @Override
-    protected void doPost(HttpServletRequest request, HttpServletResponse response) throws IOException
-    {
-        handleRequest(request, response);
     }
 }
