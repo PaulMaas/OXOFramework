@@ -4,12 +4,12 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
 
-class CachingOutputStream extends OutputStream
+public class CachedOutputStream extends OutputStream
 {
     OutputStream delegate;
     ByteArrayOutputStream cache;
 
-    CachingOutputStream(OutputStream out)
+    CachedOutputStream(OutputStream out)
     {
         delegate = out;
         cache = new ByteArrayOutputStream(4096);

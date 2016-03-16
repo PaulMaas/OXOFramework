@@ -6,6 +6,13 @@ import javax.servlet.http.HttpServletResponse;
 import javax.servlet.http.HttpServletResponseWrapper;
 
 /**
+ * Response wrapper for OXO Framework.
+ * 
+ * TODO: Notifications are used for announcements and notifications currently.
+ * They should be separated. Automated caching is currently disabled if there are 
+ * notifications present. If the notifications are really announcements, not set
+ * based on some predicate, then they should not disable caching.
+ * 
  * @author Paul van der Maas
  */
 public class OXOResponse extends HttpServletResponseWrapper
@@ -95,7 +102,7 @@ public class OXOResponse extends HttpServletResponseWrapper
     }
 
     /**
-     * Check if this request generated exceptions.
+     * Check if this request generated notifications.
      *
      * @return
      */

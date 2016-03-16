@@ -11,6 +11,8 @@ import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletRequestWrapper;
 
 /**
+ * Request wrapper for OXO Framework.
+ * 
  * @author Paul van der Maas
  */
 public class OXORequest extends HttpServletRequestWrapper

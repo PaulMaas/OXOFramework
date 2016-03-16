@@ -3,7 +3,7 @@ package com.centropoly.oxo;
 /**
  * @author Paul van der Maas
  */
-public abstract class WebModule extends CachingOXOServlet
+public abstract class WebModule extends OXOServlet
 {
     @Override
     protected void init(OXORequest request, OXOResponse response)

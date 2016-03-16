@@ -1,5 +1,6 @@
 package com.centropoly.oxo;
 
+import com.centropoly.oxo.CachedResponseManager.CachedResponse;
 import com.centropoly.oxo.converters.OXOResponseConverter;
 import com.centropoly.oxo.converters.OXORequestConverter;
 import com.centropoly.oxo.converters.ClientConverter;
@@ -22,6 +23,7 @@ import javax.xml.transform.TransformerFactory;
 import javax.xml.transform.sax.SAXSource;
 import javax.xml.transform.stream.StreamResult;
 import org.joda.time.DateTime;
+import org.joda.time.Duration;
 import org.xml.sax.InputSource;
 import org.xml.sax.SAXException;
 import org.xml.sax.XMLReader;
@@ -41,6 +43,8 @@ import org.xml.sax.helpers.XMLReaderFactory;
  */
 public abstract class OXOServlet extends HttpServlet
 {
+    protected final CachedResponseManager cachedResponseManager = new CachedResponseManager();
+    
     /**
      * This method is called only once when a servlet is being put into service 
      * and can be used to perform 'global' servlet initialization tasks.
@@ -89,16 +93,20 @@ public abstract class OXOServlet extends HttpServlet
         }
         
         // These are optional, but can be set as environment variables or in the deployment descriptor.
-        
+
+        // Turns debugging on or off globally.
         String debug = System.getProperty("DEBUG", this.getServletContext().getInitParameter("debug"));
         if (debug != null) {
             OXOContext.debug(Boolean.parseBoolean(debug));
         }
-        
+
+        // Turns caching on or off globally.
         String cache = System.getProperty("CACHE", this.getServletContext().getInitParameter("cache"));
-        if (debug != null) {
+        if (cache != null) {
             OXOContext.cache(Boolean.parseBoolean(cache));
         }
+
+        if (OXOContext.debug()) System.out.println("init()");
     }
 
     /**
@@ -158,46 +166,159 @@ public abstract class OXOServlet extends HttpServlet
         // directly to the output stream for debugging or other purposes.
         if (!response.isCommitted())
         {
-            Data data = response.getData();
-            String method = request.getMethod();
-            
-            if (OXOContext.cache() && data != null && method.equals("GET"))
+            if (useCache(request, response))
             {
-                // Check if the client can use its cached version of the response.
-                DateTime dateTimeLastModified = data.getDateTimeLastModified();
-                if (dateTimeLastModified != null)
+                if (OXOContext.debug()) System.out.println("outputResponse() -> use cache " + request.getServletPath());
+                if (useClientCache(request, response))
                 {
-                    // Check if the client's version needs to be updated by checking
-                    // if the last modified date/time is greater than or equal to the
-                    // client's version's date/time.
-                    long ifModifiedSince = request.getDateHeader("If-Modified-Since");
-                    if (ifModifiedSince >= dateTimeLastModified.getMillis())
-                    {
-                        // Use client's cache.
-                        if (OXOContext.debug()) System.out.println("Use client's cache.");
-                        response.setStatus(HttpServletResponse.SC_NOT_MODIFIED);
-                    }
-                    else
-                    {
-                        // Update client's cache.
-                        if (OXOContext.debug()) System.out.println("Update client's cache.");
-                        response.setDateHeader("Last-Modified", dateTimeLastModified.getMillis());
-
-                        outputResponse(request, response, response.getOutputStream());
-                    }
+                    if (OXOContext.debug()) System.out.println("outputResponse() -> use client cache " + request.getServletPath());
+                    response.setStatus(HttpServletResponse.SC_NOT_MODIFIED);
                 }
-                else
+                else if (useServerCache(request, response))
                 {
-                    // Don't use (client's) cache, no last modified information available.
-                    if (OXOContext.debug()) System.out.println("Update client's cache.");
-
-                    outputResponse(request, response, response.getOutputStream());
+                    if (OXOContext.debug()) System.out.println("outputResponse() -> use server cache " + request.getServletPath());
+                    outputCachedResponse(request, response);
+                }
+                else // Prime server cache.
+                {
+                    if (OXOContext.debug()) System.out.println("outputResponse() -> prime/use server cache " + request.getServletPath());
+                    cacheOutputResponse(request, response);
                 }
             }
             else
             {
+                if (OXOContext.debug()) System.out.println("outputResponse() -> do not use cache " + request.getServletPath());
                 outputResponse(request, response, response.getOutputStream());
             }
+        }
+    }
+    
+    protected final boolean useCache(OXORequest request, OXOResponse response)
+    {
+        // Cache must be enabled.
+        if (OXOContext.cache())
+        {
+            // Using any sort of cache only makes sense for get requests.
+            if (request.getMethod().equals("GET"))
+            {
+                // We also require that there are no exceptions or notifications set on the response.
+                if (!response.hasExceptions() && !response.hasNotifications())
+                {
+                    Data data = response.getData();
+
+                    Duration dataExpirationDuration = data.getExpirationDuration();
+                    DateTime dataLastModifiedDateTime = data.getLastModifiedDateTime();
+
+                    // Data must have an expiration duration or last modified date/time. 
+                    if (dataExpirationDuration != null || dataLastModifiedDateTime != null)
+                    {
+                        return true;
+                    }
+                }
+            }
+        }
+        
+        return false;
+    }
+    
+    protected final boolean useClientCache(OXORequest request, OXOResponse response)
+    {
+        Data data = response.getData();
+
+        Duration dataExpirationDuration = data.getExpirationDuration();
+        DateTime dataLastModifiedDateTime = data.getLastModifiedDateTime();
+        DateTime cachedDateTime = new DateTime(request.getDateHeader("If-Modified-Since"));
+
+        // Was the "If-Modified-Since" header present on the request?
+        if (cachedDateTime.isAfter(new DateTime(0)))
+        {
+            // Has the client's cache entry expired?
+            if (dataExpirationDuration == null || cachedDateTime.plus(dataExpirationDuration).isAfterNow())
+            {
+                // Has the data been modified since it was cached on the client?
+                if (dataLastModifiedDateTime == null || dataLastModifiedDateTime.isBefore(cachedDateTime))
+                {
+                    return true; // Not expired or modified.
+                }
+                else
+                {
+                    return false; // Modified.
+                }
+            }
+            else
+            {
+                return false; // Expired.
+            }
+        }
+        else
+        {
+            return  false; // Non-existent.
+        }
+    }
+
+    protected final boolean useServerCache(OXORequest request, OXOResponse response)
+    {
+        Data data = response.getData();
+
+        Duration dataExpirationDuration = data.getExpirationDuration();
+        DateTime dataLastModifiedDateTime = data.getLastModifiedDateTime();
+        DateTime cachedDateTime = cachedResponseManager.getCachedResponseDateTime(request);
+
+        // Is there an entry in the cache?
+        if (cachedDateTime != null)
+        {
+            // Has the cache entry expired?
+            if (dataExpirationDuration == null || cachedDateTime.plus(dataExpirationDuration).isAfterNow())
+            {
+                // Has the data been modified since it was cached?
+                if (dataLastModifiedDateTime == null || dataLastModifiedDateTime.isBefore(cachedDateTime))
+                {
+                    return true; // Not expired or modified.
+                }
+                else
+                {
+                    return false; // Modified.
+                }
+            }
+            else
+            {
+                return false; // Expired.
+            }
+        }
+        else
+        {
+            return  false; // Non-existent.
+        }
+    }
+
+    // No check is done. The cache MUST contain a valid cached response for the request.
+    protected void outputCachedResponse(OXORequest request, OXOResponse response) throws IOException
+    {
+        CachedResponse cachedResponse = cachedResponseManager.getCachedResponse(request);
+        
+        setResponseCacheHeaders(request, response);
+
+        cachedResponse.outputStream.getBuffer().writeTo(response.getOutputStream());
+    }
+    
+    protected void cacheOutputResponse(OXORequest request, OXOResponse response) throws IOException, SAXException, TransformerException, ReflectiveOperationException
+    {
+        CachedResponse cachedResponse = cachedResponseManager.createCachedResponse(request, response);
+        
+        setResponseCacheHeaders(request, response);
+
+        outputResponse(request, response, cachedResponse.outputStream);
+    }
+    
+    protected void setResponseCacheHeaders(OXORequest request, OXOResponse response)
+    {
+        DateTime cachedDateTime = cachedResponseManager.getCachedResponseDateTime(request);
+        response.setDateHeader("Last-Modified", cachedDateTime.getMillis());
+
+        Duration dataExpirationDuration = response.getData().getExpirationDuration();
+        if (dataExpirationDuration != null)
+        {
+            response.setDateHeader("Expires", cachedDateTime.plus(dataExpirationDuration).getMillis());
         }
     }
 

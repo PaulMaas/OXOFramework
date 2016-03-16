@@ -21,7 +21,7 @@ import org.xml.sax.helpers.XMLReaderFactory;
  * 
  * @author Paul van der Maas
  */
-public abstract class WebService extends CachingOXOServlet
+public abstract class WebService extends OXOServlet
 {
     private boolean responseAsJSON = false;
     private JsonOutputType jsonOutputType = JsonOutputType.JSON;

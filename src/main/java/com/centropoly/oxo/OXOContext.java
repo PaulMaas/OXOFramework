@@ -13,6 +13,9 @@ package com.centropoly.oxo;
  * End-users are encouraged to extend this class to bring additional functionality
  * to their particular environment. For example, by providing authorization/authentication methods.
  * 
+ * TODO: This needs to be redesigned, rethought. There may be an issue here with multiple request interfering
+ * with each other. Is a new OXOContext created for each servlet? Or are they shared between servlets.
+ * This will cause issues.
  */
 
 public class OXOContext
@@ -25,6 +28,7 @@ public class OXOContext
     private static String propertiesPackage = null;
     private static String servletsPackage = null;
     
+    // These have defaults.
     private static boolean debug = false;
     private static boolean cache = true;
 
