@@ -6,7 +6,7 @@ import com.thoughtworks.xstream.converters.MarshallingContext;
 import com.thoughtworks.xstream.converters.UnmarshallingContext;
 import com.thoughtworks.xstream.io.HierarchicalStreamReader;
 import com.thoughtworks.xstream.io.HierarchicalStreamWriter;
-import java.util.Iterator;
+import java.util.LinkedHashMap;
 import java.util.Map;
 
 public class OXORequestConverter implements Converter
@@ -22,7 +22,6 @@ public class OXORequestConverter implements Converter
     {
         @SuppressWarnings("unchecked")
         OXORequest request = (OXORequest) object;
-        Map parameterMap = request.getParameterMap();
 
         writer.startNode("user");
         if (request.getUser() != null)
@@ -30,40 +29,44 @@ public class OXORequestConverter implements Converter
             context.convertAnother(request.getUser());
         }
         writer.endNode();
-        
-        writer.startNode("contextPath");
-        if (request.getContextPath() != null)
-        {
-            writer.setValue(request.getContextPath());
-        }
-        writer.endNode();
 
-        writer.startNode("servletPath");
-        if (request.getServletPath() != null)
-        {
-            writer.setValue(request.getServletPath());
-        }
-        writer.endNode();
-
+        Map<String, String[]> parameterMap = request.getParameterMap();
         writer.startNode("parameters");
-        for (Iterator iterator = parameterMap.entrySet().iterator(); iterator.hasNext();)
+        for (Map.Entry<String, String[]> entry : parameterMap.entrySet())
         {
-            Map.Entry entry = (Map.Entry) iterator.next();
             writer.startNode("parameter");
-            writer.addAttribute("name", entry.getKey().toString());
-            String[] values = (String[]) entry.getValue();
-            for (int i = 0; i < values.length; i++)
-            {
-                if (values[i] != null)
-                {
+            writer.addAttribute("name", entry.getKey());
+            String[] values = entry.getValue();
+            for (String value : values) {
+                if (value != null) {
                     writer.startNode("value");
-                    writer.setValue(values[i]);
+                    writer.setValue(value);
                     writer.endNode();
                 }
             }
             writer.endNode();
         }
         writer.endNode();
+
+        this.marshalObjectMethodMappings(request, new LinkedHashMap() {{
+            put("method", "getMethod");
+            put("scheme", "getScheme");
+            put("serverName", "getServerName");
+            put("serverPort", "getServerPort");
+            put("contextPath", "getContextPath");
+            put("servletPath", "getServletPath");
+        }}, writer);
+    }
+
+    private void marshalObjectMethodMappings(Object object, Map<String,String> methodMappings, HierarchicalStreamWriter writer) {
+        for (Map.Entry<String, String> entry : methodMappings.entrySet()) {
+            writer.startNode(entry.getKey());
+            try {
+                writer.setValue(object.getClass().getMethod(entry.getValue()).invoke(object).toString());
+            } catch(ReflectiveOperationException exception) {
+            }
+            writer.endNode();
+        }
     }
 
     @Override

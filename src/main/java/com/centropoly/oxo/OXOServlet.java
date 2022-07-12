@@ -29,7 +29,7 @@ import org.xml.sax.SAXException;
 import org.xml.sax.XMLReader;
 import org.xml.sax.helpers.XMLReaderFactory;
 
-/*
+/**
  * To enable us to localize the templates that are used to transform the XML representation of the response into output, we will use entities.
  * Every entity that is to be localized should be an external entity using the special scheme outlined below.
  * A custom entity resolver (OXOEntityResolver) will look up the value for the (localizable) entities.
@@ -360,7 +360,13 @@ public abstract class OXOServlet extends HttpServlet
         }
 
         // Print the XML generated for debugging purposes.
-        //if (OXOContext.debug()) System.out.println(xStream.toXML(response));
+        if (OXOContext.debug()) {
+            System.out.println("--------------------------------------------------");
+            System.out.println();
+            System.out.println(xStream.toXML(response));
+            System.out.println();
+            System.out.println("--------------------------------------------------");
+        }
 
         // Write output to the given outputstream transformed or untransformed.
         if (response.getTransformationOutputType() != null)

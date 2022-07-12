@@ -5,5 +5,8 @@ build/
 nbproject/
 build.xml
 manifest.mf
+nbbuild.xml
+nbproject.backup/
 /target/
 *.log
+.DS_Store

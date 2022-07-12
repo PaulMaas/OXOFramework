@@ -39,16 +39,16 @@ public final class Properties
         return getString(OXOContext.getUser().getPreferences().getLocale(), bundle, key, arguments);
     }
 
-    /*
+    /**
+     *
+     * ------------------START WORKAROUND---------------------------------------
+     * 
      * The following six functions are part of a workaround to a problem in
      * the SAX parser. At the time of writing, the SAX parser cannot
      * resolve method calls in the XSL to variable-length method calls in Java.
      * 
      * Hopefully in the future, they will support this functionality and
      * we can get rid of this ugly workaround. It allows upto five parameters.
-     * 
-     * ------------------START WORKAROUND---------------------------------------
-     * 
      */
 
     public static String getString(String bundle, String key)
@@ -81,7 +81,7 @@ public final class Properties
         return getString(bundle, key, new Object[] {argumentA, argumentB, argumentC, argumentD, argumentE});
     }
 
-    /*
+    /**
      * 
      * ------------------END WORKAROUND-----------------------------------------
      * 
