@@ -19,6 +19,13 @@ import org.xml.sax.helpers.XMLReaderFactory;
 /**
  * A web service has the special ability to transform XML to JSON if so requested.
  * 
+ * TODO
+ * Move the processRequest code from CentropolyService and TestToolService here.
+ * Add a bit of security to it by requiring each endpoint to have a special annotation.
+ * We could even make those annotations actually (optionally) define the endpoint's name.
+ * In addition, add the ability to throw exceptions or return an error state. Currently this
+ * is implemented as response.addException. Might be fine... just take a look.
+ * 
  * @author Paul van der Maas
  */
 public abstract class WebService extends OXOServlet

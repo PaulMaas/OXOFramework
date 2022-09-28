@@ -6,6 +6,7 @@ import com.centropoly.oxo.converters.OXORequestConverter;
 import com.centropoly.oxo.converters.ClientConverter;
 import com.centropoly.oxo.converters.DateTimeConverter;
 import com.centropoly.oxo.converters.LocaleConverter;
+import com.centropoly.oxo.converters.NullWrappingCollectionConverter;
 import com.thoughtworks.xstream.XStream;
 import com.thoughtworks.xstream.io.xml.DomDriver;
 import com.thoughtworks.xstream.io.xml.TraxSource;
@@ -331,7 +332,7 @@ public abstract class OXOServlet extends HttpServlet
             // Build out the data object.
             try
             {
-                response.getData().build(request, response);
+                data.build(request, response);
             }
             catch(Exception exception)
             {
@@ -343,11 +344,21 @@ public abstract class OXOServlet extends HttpServlet
         XStream xStream = new XStream(new DomDriver());
         xStream.setMode(XStream.NO_REFERENCES);
 
+        // TODO
+        // For the converters I'm registering here, I should not have to annotate anywhere I believe.
+        // Test and remove annotations that are redundant.
         xStream.registerConverter(new OXOResponseConverter());
         xStream.registerConverter(new OXORequestConverter());
         xStream.registerConverter(new ClientConverter(), XStream.PRIORITY_LOW);
         xStream.registerConverter(new LocaleConverter());
         xStream.registerConverter(new DateTimeConverter());
+        // TODO
+        // This is a WIP to deal with null values in collections. Right now, it's fine in XML,
+        // but when converted to JSON, it breaks the list structure.
+        // We can fix it by wrapping the <null/> values in the same XML element as it's siblings,
+        // maybe NamedCollectionConverter fixes it (test), or maybe just remove this
+        // and deal with list's containing nulls in another way.
+        xStream.registerConverter(new NullWrappingCollectionConverter(xStream.getMapper()));
         xStream.aliasType("response", OXOResponse.class);
 
         if (data != null)

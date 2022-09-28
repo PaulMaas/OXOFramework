@@ -1,5 +1,6 @@
 package com.centropoly.oxo.converters;
 
+import com.centropoly.oxo.Data;
 import com.centropoly.oxo.OXOResponse;
 import com.centropoly.oxo.OXOResponse.Notification;
 import com.centropoly.oxo.RequestParameterException;
@@ -56,9 +57,10 @@ public class OXOResponseConverter implements Converter
         writer.endNode();
 
         writer.startNode("data");
-        if (response.getData() != null)
+        Data data = response.getData();
+        if (data != null)
         {
-            context.convertAnother(response.getData());
+            context.convertAnother(data);
         }
         writer.endNode();
 
