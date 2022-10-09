@@ -23,6 +23,8 @@ import javax.xml.transform.TransformerException;
 import javax.xml.transform.TransformerFactory;
 import javax.xml.transform.sax.SAXSource;
 import javax.xml.transform.stream.StreamResult;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.joda.time.DateTime;
 import org.joda.time.Duration;
 import org.xml.sax.InputSource;
@@ -44,6 +46,8 @@ import org.xml.sax.helpers.XMLReaderFactory;
  */
 public abstract class OXOServlet extends HttpServlet
 {
+    private final static Logger logger = LogManager.getLogger();
+
     protected final CachedResponseManager cachedResponseManager = new CachedResponseManager();
     
     /**
@@ -95,7 +99,8 @@ public abstract class OXOServlet extends HttpServlet
         
         // These are optional, but can be set as environment variables or in the deployment descriptor.
 
-        // Turns debugging on or off globally.
+        // Turns debugging on or off globally. This does not control the log level.
+        // Essentially, this controls wether (potentially sensitive) debugging data may be sent as part of the (error) response.
         String debug = System.getProperty("DEBUG", this.getServletContext().getInitParameter("debug"));
         if (debug != null) {
             OXOContext.debug(Boolean.parseBoolean(debug));
@@ -107,7 +112,7 @@ public abstract class OXOServlet extends HttpServlet
             OXOContext.cache(Boolean.parseBoolean(cache));
         }
 
-        if (OXOContext.debug()) System.out.println("init()");
+        logger.debug("OXOServlet.init()");
     }
 
     /**
@@ -125,7 +130,7 @@ public abstract class OXOServlet extends HttpServlet
      */
     protected void init(OXORequest request, OXOResponse response)
     {
-        if (OXOContext.debug()) System.out.println("init(request, response) " + request.getServletPath());
+        logger.debug("OXOServlet.init(request, response) " + request.getServletPath());
 
         // Set all contextual information needed by the
         // OXO Framework into OXOContext.
@@ -169,26 +174,26 @@ public abstract class OXOServlet extends HttpServlet
         {
             if (useCache(request, response))
             {
-                if (OXOContext.debug()) System.out.println("outputResponse() -> use cache " + request.getServletPath());
+                logger.debug("OXOServlet.outputResponse() -> use cache " + request.getServletPath());
                 if (useClientCache(request, response))
                 {
-                    if (OXOContext.debug()) System.out.println("outputResponse() -> use client cache " + request.getServletPath());
+                    logger.debug("OXOServlet.outputResponse() -> use client cache " + request.getServletPath());
                     response.setStatus(HttpServletResponse.SC_NOT_MODIFIED);
                 }
                 else if (useServerCache(request, response))
                 {
-                    if (OXOContext.debug()) System.out.println("outputResponse() -> use server cache " + request.getServletPath());
+                    logger.debug("OXOServlet.outputResponse() -> use server cache " + request.getServletPath());
                     outputCachedResponse(request, response);
                 }
                 else // Prime server cache.
                 {
-                    if (OXOContext.debug()) System.out.println("outputResponse() -> prime/use server cache " + request.getServletPath());
+                    logger.debug("OXOServlet.outputResponse() -> prime/use server cache " + request.getServletPath());
                     cacheOutputResponse(request, response);
                 }
             }
             else
             {
-                if (OXOContext.debug()) System.out.println("outputResponse() -> do not use cache " + request.getServletPath());
+                logger.debug("OXOServlet.outputResponse() -> do not use cache " + request.getServletPath());
                 outputResponse(request, response, response.getOutputStream());
             }
         }
@@ -371,13 +376,7 @@ public abstract class OXOServlet extends HttpServlet
         }
 
         // Print the XML generated for debugging purposes.
-        if (OXOContext.debug()) {
-            System.out.println("--------------------------------------------------");
-            System.out.println();
-            System.out.println(xStream.toXML(response));
-            System.out.println();
-            System.out.println("--------------------------------------------------");
-        }
+        logger.debug(xStream.toXML(response));
 
         // Write output to the given outputstream transformed or untransformed.
         if (response.getTransformationOutputType() != null)
@@ -422,9 +421,7 @@ public abstract class OXOServlet extends HttpServlet
 
         try
         {
-            System.out.println(exception.getMessage());
-            System.out.println();
-            exception.printStackTrace(System.out);
+            logger.debug("An exception was encountered and is sent back as the response.", exception);
 
             // Must wrap the output stream here instead of getting the print
             // writer directly since data may have already been written to it.
@@ -437,7 +434,7 @@ public abstract class OXOServlet extends HttpServlet
         }
         catch(IOException unhandledException)
         {
-            unhandledException.printStackTrace();
+            logger.debug("While generating an error response another unhandled exception occurred.", unhandledException, exception);
         }
     }
     
@@ -531,7 +528,7 @@ public abstract class OXOServlet extends HttpServlet
     @Override
     protected void service(HttpServletRequest request, HttpServletResponse response) throws ServletException, IOException
     {
-        if (OXOContext.debug()) System.out.println("service() " + request.getServletPath());
+        logger.debug("OXOServlet.service() " + request.getServletPath());
 
         String method = request.getMethod();
         if (method.equals("GET") || method.equals("POST"))
@@ -561,16 +558,16 @@ public abstract class OXOServlet extends HttpServlet
      */
     protected void handleRequest(OXORequest request, OXOResponse response) throws IOException
     {
-        if (OXOContext.debug()) System.out.println("handleRequest() " + request.getServletPath());
+        logger.debug("OXOServlet.handleRequest() " + request.getServletPath());
 
         try
         {
             // Process request/initialize response.
-            if (OXOContext.debug()) System.out.println("processRequest() " + request.getServletPath());
+            logger.debug("OXOServlet.processRequest() " + request.getServletPath());
             processRequest(request, response);
             
             // Output the (transformed) response.
-            if (OXOContext.debug()) System.out.println("outputResponse() " + request.getServletPath());
+            logger.debug("OXOServlet.outputResponse() " + request.getServletPath());
             outputResponse(request, response);
         }
         catch (Exception exception)
