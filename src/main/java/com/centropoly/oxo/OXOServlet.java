@@ -425,12 +425,13 @@ public abstract class OXOServlet extends HttpServlet
 
             // Must wrap the output stream here instead of getting the print
             // writer directly since data may have already been written to it.
-            PrintWriter out = new PrintWriter(response.getOutputStream());
-            out.println("An exception was encountered:");
-            out.println(exception.getMessage());
-            out.println();
-            if (OXOContext.debug()) exception.printStackTrace(out);
-            out.close();
+            try (PrintWriter out = new PrintWriter(response.getOutputStream()))
+            {
+                out.println("An exception was encountered:");
+                out.println(exception.getMessage());
+                out.println();
+                if (OXOContext.debug()) exception.printStackTrace(out);
+            }
         }
         catch(IOException unhandledException)
         {

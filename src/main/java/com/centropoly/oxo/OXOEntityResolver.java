@@ -53,15 +53,16 @@ public class OXOEntityResolver implements EntityResolver
             {
                 String templatePath = this.templatesFolder + uri.getSchemeSpecificPart();
 
-                InputStream inputStream = this.getClass().getClassLoader().getResourceAsStream(templatePath);
-
-                if (inputStream != null)
+                try (InputStream inputStream = this.getClass().getClassLoader().getResourceAsStream(templatePath))
                 {
-                    return new InputSource(inputStream);
-                }
-                else
-                {
-                    throw new IOException("A referenced external (template) entity could not be found: " + templatePath);
+                    if (inputStream != null)
+                    {
+                        return new InputSource(inputStream);
+                    }
+                    else
+                    {
+                        throw new IOException("A referenced external (template) entity could not be found: " + templatePath);
+                    }
                 }
             }
             else if (uri.getScheme().equalsIgnoreCase("property"))
