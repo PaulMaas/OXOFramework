@@ -4,9 +4,12 @@ dist/
 build/
 nbproject/
 build.xml
+node_modules/
 manifest.mf
 nbbuild.xml
 nbproject.backup/
-/target/
+target/
 *.log
 .DS_Store
+nb-configuration.xml
+nbactions.xml
