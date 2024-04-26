@@ -35,9 +35,9 @@ import org.xml.sax.helpers.XMLReaderFactory;
 /**
  * To enable us to localize the templates that are used to transform the XML representation of the response into output, we will use entities.
  * Every entity that is to be localized should be an external entity using the special scheme outlined below.
- * A custom entity resolver (OXOEntityResolver) will look up the value for the (localizable) entities.
+ * A custom entity resolver (OXOEntityResolver) will look up the value for the (localisable) entities.
  * 
- * An opaque URI with a custom scheme apropriately named 'property' will tell the entity resolver where to find a value for the requested entity.
+ * An opaque URI with a custom scheme appropriately named 'property' will tell the entity resolver where to find a value for the requested entity.
  * The scheme specific part tells the entity resolver the name of the resource bundle, and the fragment represents the key to the desired data.
  * This method has the benefit of using an XML-native technology. XML entities are well-known and this also allows us to use any SAX2 Core compatible parser
  * to do the work. We'll be using XML entities and URI's in a legal way, without breaking any protocols.
@@ -46,7 +46,7 @@ import org.xml.sax.helpers.XMLReaderFactory;
  */
 public abstract class OXOServlet extends HttpServlet
 {
-    private final static Logger logger = LogManager.getLogger();
+    private final static Logger logger = LogManager.getLogger(OXOServlet.class);
 
     protected final CachedResponseManager cachedResponseManager = new CachedResponseManager();
     
@@ -117,7 +117,7 @@ public abstract class OXOServlet extends HttpServlet
 
     /**
      * This method is called once per request/response cycle and can be used to
-     * perform 'local' servlet initialization tasks.
+     * perform 'local' servlet initialization tasks (initialize context).
      * 
      * Overriding implementations of this method must call the super implementation
      * first.
@@ -138,6 +138,68 @@ public abstract class OXOServlet extends HttpServlet
         OXOContext.setResponse(response);
         OXOContext.setUser(new User(new Client(request, response)));
     }
+
+    /**
+     * Override service method to handle requests for both HTTP <code>GET</code>
+     * and <code>POST</code> methods.
+     * 
+     * This falls back on the super implementation for all other request methods.
+     *
+     * @param request
+     * @param response
+     * @throws javax.servlet.ServletException
+     * @throws java.io.IOException
+     */
+    @Override
+    protected void service(HttpServletRequest request, HttpServletResponse response) throws ServletException, IOException
+    {
+        logger.debug("OXOServlet.service() " + request.getServletPath());
+
+        String method = request.getMethod();
+        if (method.equals("GET") || method.equals("POST"))
+        {
+            // Wrap the request and response.
+            OXORequest oxoRequest = new OXORequest(request);
+            OXOResponse oxoResponse = new OXOResponse(response);
+
+            // Perform request specific initialization.
+            init(oxoRequest, oxoResponse);
+
+            handleRequest(oxoRequest, oxoResponse);
+        }
+        else
+        {
+            // Fall back on super implementation for other request methods.
+            super.service(request, response);
+        }
+    }
+
+    /**
+     * Handle requests for both HTTP <code>GET</code> and <code>POST</code> methods.
+     *
+     * @param request
+     * @param response
+     * @throws java.io.IOException
+     */
+    protected final void handleRequest(OXORequest request, OXOResponse response) throws IOException
+    {
+        logger.debug("OXOServlet.handleRequest() " + request.getServletPath());
+
+        try
+        {
+            // Process request/initialize response.
+            logger.debug("OXOServlet.processRequest() " + request.getServletPath());
+            processRequest(request, response);
+            
+            // Output the (transformed) response.
+            logger.debug("OXOServlet.outputResponse() " + request.getServletPath());
+            outputResponse(request, response);
+        }
+        catch (Exception exception)
+        {
+            outputException(response, exception);
+        }
+    }
     
     /**
      * Executes operation(s) determined by the properties of the request object.
@@ -148,7 +210,7 @@ public abstract class OXOServlet extends HttpServlet
      * 
      * Either way, this method should (normally) tell the response what resources to generate and, possibly, how to return them.
      *
-     * @param request Contains information about the request which should be used to tell the response how to generate and return resources.
+     * @param request Contains information about the request which should be used to tell the servlet how to generate and return responses.
      * @param response Should be informed on how to respond to the request by calling the hooks provided.
      * @throws Exception An exception thrown here could not be handled internally. A general error page should be shown.
      */
@@ -166,12 +228,15 @@ public abstract class OXOServlet extends HttpServlet
      */
     protected final void outputResponse(OXORequest request, OXOResponse response) throws IOException, SAXException, TransformerException, ReflectiveOperationException
     {
-        // Only output response if the response is not committed yet.
+        // Check if the response is not committed yet.
         // A committed response indicates that we should not try to generate the response output.
+        // It may have already been 'written' by #processRequest(), for instance.
         // One case of this would be if the required action is a redirect or if output has been written
         // directly to the output stream for debugging or other purposes.
         if (!response.isCommitted())
         {
+            OutputStream outputStream;
+            
             if (useCache(request, response))
             {
                 logger.debug("OXOServlet.outputResponse() -> use cache " + request.getServletPath());
@@ -179,26 +244,244 @@ public abstract class OXOServlet extends HttpServlet
                 {
                     logger.debug("OXOServlet.outputResponse() -> use client cache " + request.getServletPath());
                     response.setStatus(HttpServletResponse.SC_NOT_MODIFIED);
+                    
+                    // No further action needed.
+                    return;
                 }
                 else if (useServerCache(request, response))
                 {
                     logger.debug("OXOServlet.outputResponse() -> use server cache " + request.getServletPath());
                     outputCachedResponse(request, response);
+
+                    // No further action needed, #outputCachedResponse() 'commits' the response.
+                    return;
                 }
                 else // Prime server cache.
                 {
                     logger.debug("OXOServlet.outputResponse() -> prime/use server cache " + request.getServletPath());
-                    cacheOutputResponse(request, response);
+                    outputStream = createCachedOutputStreamForResponse(request, response);
                 }
             }
             else
             {
                 logger.debug("OXOServlet.outputResponse() -> do not use cache " + request.getServletPath());
-                outputResponse(request, response, response.getOutputStream());
+                outputStream = response.getOutputStream();
+            }
+
+            Data data = response.getData();
+            if (data != null)
+            {
+                // Build out the data object.
+                try
+                {
+                    // Data should call #response.isCommitted(true) if it produces the output directly.
+                    data.build(request, response);
+                }
+                catch(Exception exception)
+                {
+                    outputException(response, new Exception("An unhandled exception occurred while building the response data.", exception));
+                }
+            }            
+
+            if (!response.isCommitted())
+            {
+                // Write output to the given outputstream transformed or untransformed.
+                if (response.getTransformationOutputType() != null)
+                {
+                    writeTransformedXMLToOutputStream(request, response, outputStream);
+                }
+                else
+                {
+                    writeXMLToOutputStream(request, response, outputStream);
+                }
             }
         }
     }
-    
+
+    // TODO
+    // If the passed exception implements OXOException (need to be created) it should have a HTTP status code.
+    // otherwise, set it as an internal server error. 
+    protected void outputException(OXOResponse response, Exception exception)
+    {
+        // Only set it if it hasn't already been set...
+        if (response.getStatus() == 0 || response.getStatus() == HttpServletResponse.SC_OK)
+        {
+            response.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
+        }
+
+        try
+        {
+            logger.debug("An exception was encountered and is sent back as the response.", exception);
+
+            // Must wrap the output stream here instead of getting the print
+            // writer directly since data may have already been written to it.
+            try (PrintWriter out = new PrintWriter(response.getOutputStream()))
+            {
+                out.println("An exception was encountered:");
+                out.println(exception.getMessage());
+                out.println();
+                if (OXOContext.debug()) exception.printStackTrace(out);
+            }
+        }
+        catch(IOException unhandledException)
+        {
+            logger.debug("While generating an error response another unhandled exception occurred.", unhandledException, exception);
+        }
+    }
+
+    /**
+     * This method takes the XML from XStream, transforms it using XSLT and then writes it to the output stream.
+     * 
+     * @param request
+     * @param response
+     * @param outputStream
+     * @throws java.io.IOException
+     * @throws org.xml.sax.SAXException
+     * @throws javax.xml.transform.TransformerException
+     */
+    protected void writeTransformedXMLToOutputStream(OXORequest request, OXOResponse response, OutputStream outputStream) throws IOException, SAXException, TransformerException
+    {
+        Data data = response.getData();
+        XStream xStream = getXStreamFromData(data);
+
+        // Create an entity resolver which will be used to resolve the root XSL template
+        // as well as external entities referenced in the template itself.
+        OXOEntityResolver entityResolver = new OXOEntityResolver(OXOContext.getTemplatesPackage(), OXOContext.getPropertiesPackage());
+
+        String canonicalClassName = response.getData().getClass().getCanonicalName().toLowerCase();
+        int dataIndex = canonicalClassName.lastIndexOf("data");
+        canonicalClassName = (dataIndex == -1) ? canonicalClassName : canonicalClassName.substring(0, dataIndex);
+
+        // Determine the XSL template to use in the transformation.
+        StringBuilder stringBuilder = new StringBuilder("template:");
+        stringBuilder.append(canonicalClassName.replaceFirst(OXOContext.getServletsPackage(), "").replace(".", "/"));
+        stringBuilder.append(".");
+        stringBuilder.append(response.getTransformationOutputType());
+        stringBuilder.append(".xsl");
+
+        String xslTemplate = stringBuilder.toString();
+
+        // Retrieve the root XSL template.
+        InputSource inputSource = entityResolver.resolveEntity(null, xslTemplate);
+
+        // Create an XML reader which will be used to process the XSL template.
+        // We assign our own custom entity resolver so that it can resolve
+        // entities that are to be located using our customized template scheme.
+        XMLReader xmlReader = XMLReaderFactory.createXMLReader();
+        xmlReader.setEntityResolver(entityResolver);
+
+        // Create the SAXSource objects.
+        SAXSource xslSource = new SAXSource(xmlReader, inputSource);
+        SAXSource xmlSource = new TraxSource(response, xStream);
+
+        // Create a transformer.
+        TransformerFactory transformerFactory = TransformerFactory.newInstance();
+        transformerFactory.setURIResolver(new OXOURIResolver(entityResolver));
+        transformerFactory.setErrorListener(new OXOErrorListener());
+
+        try
+        {
+            Transformer transformer = transformerFactory.newTransformer(xslSource);
+
+            // Only set the content headers if we are outputting the result
+            // of the tranformation to a servlet output stream.
+            // TODO: We should set these as early as possible so that overriding methods can potentially overwrite them.
+            if (outputStream instanceof ServletOutputStream)
+            {
+                String mediaType = transformer.getOutputProperty("media-type");
+                if (mediaType != null)
+                {
+                    response.setContentType(mediaType);
+                }
+                String encoding = transformer.getOutputProperty("encoding");
+                if (encoding != null)
+                {
+                    response.setCharacterEncoding(encoding);
+                }
+            }
+
+            transformer.transform(xmlSource, new StreamResult(outputStream));
+        }
+        catch (TransformerException exception)
+        {
+            // Wrap the exception to add additional information.
+            throw new TransformerException(exception.getMessage() + " This stylesheet may contain an error: " + xslTemplate + ".", exception);
+        }
+    }
+
+    /**
+     * This method writes the XML from XStream to the output stream.
+     * 
+     * Normally, the output stream will be the response's output stream, but this method can be overridden to intercept calls to it
+     * and pipe the 'intercepted' output stream through another process to, for instance, reformat it to another output format.
+     * 
+     * @param request
+     * @param response
+     * @param outputStream
+     * @throws IOException
+     * @throws SAXException
+     * @throws TransformerException
+     * @throws ReflectiveOperationException 
+     */
+    protected void writeXMLToOutputStream(OXORequest request, OXOResponse response, OutputStream outputStream) throws IOException, SAXException, TransformerException, ReflectiveOperationException
+    {
+        Data data = response.getData();
+        XStream xStream = getXStreamFromData(data);
+
+        // Print the XML generated for debugging purposes.
+        // logger.debug(xStream.toXML(response));
+
+        // Only set the content headers if we are outputting to a servlet output stream.
+        // TODO: We should set these as early as possible sothat overriding methods can potentially overwrite them.
+        if (outputStream instanceof ServletOutputStream)
+        {
+            response.setContentType("text/xml");
+            response.setCharacterEncoding("UTF-8");
+        }
+        xStream.toXML(response, outputStream);
+    }
+
+    /**
+     * This method converts the data object into XML using XStream.
+     * 
+     * @param data
+     * @return 
+     */
+    protected final XStream getXStreamFromData(Data data)
+    {
+        // Convert the response object into XML using XStream.
+        XStream xStream = new XStream(new DomDriver());
+        xStream.setMode(XStream.NO_REFERENCES);
+
+        // TODO
+        // For the converters I'm registering here, I should not have to annotate anywhere I believe.
+        // Test and remove annotations that are redundant.
+        xStream.registerConverter(new OXOResponseConverter());
+        xStream.registerConverter(new OXORequestConverter());
+        xStream.registerConverter(new ClientConverter(), XStream.PRIORITY_LOW);
+        xStream.registerConverter(new LocaleConverter());
+        xStream.registerConverter(new DateTimeConverter());
+        // TODO
+        // This is a WIP to deal with null values in collections. Right now, it's fine in XML,
+        // but when converted to JSON, it breaks the list structure.
+        // We can fix it by wrapping the <null/> values in the same XML element as it's siblings,
+        // maybe NamedCollectionConverter fixes it (test), or maybe just remove this
+        // and deal with list's containing nulls in another way.
+        xStream.registerConverter(new NullWrappingCollectionConverter(xStream.getMapper()));
+        xStream.aliasType("response", OXOResponse.class);
+
+        if (data != null)
+        {
+            // In case the data object is a non-static inner class, this will
+            // omit the reference to the outer class.
+            xStream.omitField(data.getClass(), "this$0");
+
+            xStream.processAnnotations(data.getClass());
+        }
+
+        return xStream;
+    }
+
     protected final boolean useCache(OXORequest request, OXOResponse response)
     {
         // Cache must be enabled.
@@ -307,13 +590,13 @@ public abstract class OXOServlet extends HttpServlet
         cachedResponse.outputStream.getBuffer().writeTo(response.getOutputStream());
     }
     
-    protected void cacheOutputResponse(OXORequest request, OXOResponse response) throws IOException, SAXException, TransformerException, ReflectiveOperationException
+    protected CachedOutputStream createCachedOutputStreamForResponse(OXORequest request, OXOResponse response) throws IOException, SAXException, TransformerException, ReflectiveOperationException
     {
         CachedResponse cachedResponse = cachedResponseManager.createCachedResponse(request, response);
         
         setResponseCacheHeaders(request, response);
 
-        outputResponse(request, response, cachedResponse.outputStream);
+        return cachedResponse.outputStream;
     }
     
     protected void setResponseCacheHeaders(OXORequest request, OXOResponse response)
@@ -325,255 +608,6 @@ public abstract class OXOServlet extends HttpServlet
         if (dataExpirationDuration != null)
         {
             response.setDateHeader("Expires", cachedDateTime.plus(dataExpirationDuration).getMillis());
-        }
-    }
-
-    protected void outputResponse(OXORequest request, OXOResponse response, OutputStream outputStream) throws IOException, SAXException, TransformerException, ReflectiveOperationException
-    {
-        Data data = response.getData();
-
-        if (data != null)
-        {
-            // Build out the data object.
-            try
-            {
-                data.build(request, response);
-            }
-            catch(Exception exception)
-            {
-                outputException(response, new Exception("An unhandled exception occurred while building the response data.", exception));
-            }
-        }
-
-        // Convert the response object into XML using XStream.
-        XStream xStream = new XStream(new DomDriver());
-        xStream.setMode(XStream.NO_REFERENCES);
-
-        // TODO
-        // For the converters I'm registering here, I should not have to annotate anywhere I believe.
-        // Test and remove annotations that are redundant.
-        xStream.registerConverter(new OXOResponseConverter());
-        xStream.registerConverter(new OXORequestConverter());
-        xStream.registerConverter(new ClientConverter(), XStream.PRIORITY_LOW);
-        xStream.registerConverter(new LocaleConverter());
-        xStream.registerConverter(new DateTimeConverter());
-        // TODO
-        // This is a WIP to deal with null values in collections. Right now, it's fine in XML,
-        // but when converted to JSON, it breaks the list structure.
-        // We can fix it by wrapping the <null/> values in the same XML element as it's siblings,
-        // maybe NamedCollectionConverter fixes it (test), or maybe just remove this
-        // and deal with list's containing nulls in another way.
-        xStream.registerConverter(new NullWrappingCollectionConverter(xStream.getMapper()));
-        xStream.aliasType("response", OXOResponse.class);
-
-        if (data != null)
-        {
-            // In case the data object is a non-static inner class, this will
-            // omit the reference to the outer class.
-            xStream.omitField(data.getClass(), "this$0");
-
-            xStream.processAnnotations(data.getClass());
-        }
-
-        // Print the XML generated for debugging purposes.
-        logger.debug(xStream.toXML(response));
-
-        // Write output to the given outputstream transformed or untransformed.
-        if (response.getTransformationOutputType() != null)
-        {
-            transformOutputResponse(response, outputStream, xStream);
-        }
-        else
-        {
-            outputResponse(response, outputStream, xStream);
-        }
-    }
-
-    /**
-     * Output the response as XML without transformation to the given
-     * OutputStream. This method is for internal use.
-     * 
-     * @param response
-     * @param outputStream
-     * @param xStream 
-     * @throws java.io.IOException
-     */
-    protected void outputResponse(OXOResponse response, OutputStream outputStream, XStream xStream) throws IOException
-    {
-        // TODO: This seems kind of strange... how/why are we setting these headers this way.
-        // TODO: Why do we need to check ouputstream's type? Needs to be documented here.
-        // Only set the content headers if we are outputting to a servlet output stream.
-        if (outputStream instanceof ServletOutputStream)
-        {
-            response.setContentType("text/xml");
-            response.setCharacterEncoding("UTF-8");
-        }
-        xStream.toXML(response, outputStream);
-    }
-
-    protected void outputException(OXOResponse response, Exception exception)
-    {
-        // Only set it if it hasn't already been set...
-        if (response.getStatus() == 0 || response.getStatus() == HttpServletResponse.SC_OK)
-        {
-            response.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
-        }
-
-        try
-        {
-            logger.debug("An exception was encountered and is sent back as the response.", exception);
-
-            // Must wrap the output stream here instead of getting the print
-            // writer directly since data may have already been written to it.
-            try (PrintWriter out = new PrintWriter(response.getOutputStream()))
-            {
-                out.println("An exception was encountered:");
-                out.println(exception.getMessage());
-                out.println();
-                if (OXOContext.debug()) exception.printStackTrace(out);
-            }
-        }
-        catch(IOException unhandledException)
-        {
-            logger.debug("While generating an error response another unhandled exception occurred.", unhandledException, exception);
-        }
-    }
-    
-    /**
-     * Transform the response XML, then output the result of the transformation to the given
-     * OutputStream. This method is for internal use.
-     * 
-     * @param response
-     * @param outputStream
-     * @param xStream
-     * @throws java.io.IOException
-     * @throws org.xml.sax.SAXException
-     */
-    protected void transformOutputResponse(OXOResponse response, OutputStream outputStream, XStream xStream) throws IOException, SAXException, TransformerException
-    {
-        // Create an entity resolver which will be used to resolve the root XSL template
-        // as well as external entities referenced in the template itself.
-        OXOEntityResolver entityResolver = new OXOEntityResolver(OXOContext.getTemplatesPackage(), OXOContext.getPropertiesPackage());
-
-        String canonicalClassName = response.getData().getClass().getCanonicalName().toLowerCase();
-        int dataIndex = canonicalClassName.lastIndexOf("data");
-        canonicalClassName = (dataIndex == -1) ? canonicalClassName : canonicalClassName.substring(0, dataIndex);
-
-        // Determine the XSL template to use in the transformation.
-        StringBuilder stringBuilder = new StringBuilder("template:");
-        stringBuilder.append(canonicalClassName.replaceFirst(OXOContext.getServletsPackage(), "").replace(".", "/"));
-        stringBuilder.append(".");
-        stringBuilder.append(response.getTransformationOutputType());
-        stringBuilder.append(".xsl");
-
-        String xslTemplate = stringBuilder.toString();
-
-        // Retrieve the root XSL template.
-        InputSource inputSource = entityResolver.resolveEntity(null, xslTemplate);
-
-        // Create an XML reader which will be used to process the XSL template.
-        // We assign our own custom entity resolver so that it can resolve
-        // entities that are to be located using our customized template scheme.
-        XMLReader xmlReader = XMLReaderFactory.createXMLReader();
-        xmlReader.setEntityResolver(entityResolver);
-
-        // Create the SAXSource objects.
-        SAXSource xslSource = new SAXSource(xmlReader, inputSource);
-        SAXSource xmlSource = new TraxSource(response, xStream);
-
-        // Create a transformer.
-        TransformerFactory transformerFactory = TransformerFactory.newInstance();
-        transformerFactory.setURIResolver(new OXOURIResolver(entityResolver));
-        transformerFactory.setErrorListener(new OXOErrorListener());
-
-        try
-        {
-            Transformer transformer = transformerFactory.newTransformer(xslSource);
-
-            // Only set the content headers if we are outputting the result
-            // of the tranformation to a servlet output stream.
-            if (outputStream instanceof ServletOutputStream)
-            {
-                String mediaType = transformer.getOutputProperty("media-type");
-                if (mediaType != null)
-                {
-                    response.setContentType(mediaType);
-                }
-                String encoding = transformer.getOutputProperty("encoding");
-                if (encoding != null)
-                {
-                    //response.setCharacterEncoding(encoding);
-                }
-            }
-
-            transformer.transform(xmlSource, new StreamResult(outputStream));
-        }
-        catch (TransformerException exception)
-        {
-            // Wrap the exception to add additional information.
-            throw new TransformerException(exception.getMessage() + " This stylesheet may contain an error: " + xslTemplate + ".", exception);
-        }
-    }
-
-    /**
-     * Override service method to handle requests for both HTTP <code>GET</code>
-     * and <code>POST</code> methods.
-     * 
-     * This falls back on the super implementation for all other request methods.
-     *
-     * @param request
-     * @param response
-     * @throws javax.servlet.ServletException
-     * @throws java.io.IOException
-     */
-    @Override
-    protected void service(HttpServletRequest request, HttpServletResponse response) throws ServletException, IOException
-    {
-        logger.debug("OXOServlet.service() " + request.getServletPath());
-
-        String method = request.getMethod();
-        if (method.equals("GET") || method.equals("POST"))
-        {
-            // Wrap the request and response.
-            OXORequest oxoRequest = new OXORequest(request);
-            OXOResponse oxoResponse = new OXOResponse(response);
-
-            // Perform request specific initialization.
-            init(oxoRequest, oxoResponse);
-
-            handleRequest(oxoRequest, oxoResponse);
-        }
-        else
-        {
-            // Fall back on super implementation for other request methods.
-            super.service(request, response);
-        }
-    }
-
-    /**
-     * Handle requests for both HTTP <code>GET</code> and <code>POST</code> methods.
-     *
-     * @param request
-     * @param response
-     * @throws java.io.IOException
-     */
-    protected void handleRequest(OXORequest request, OXOResponse response) throws IOException
-    {
-        logger.debug("OXOServlet.handleRequest() " + request.getServletPath());
-
-        try
-        {
-            // Process request/initialize response.
-            logger.debug("OXOServlet.processRequest() " + request.getServletPath());
-            processRequest(request, response);
-            
-            // Output the (transformed) response.
-            logger.debug("OXOServlet.outputResponse() " + request.getServletPath());
-            outputResponse(request, response);
-        }
-        catch (Exception exception)
-        {
-            outputException(response, exception);
         }
     }
 }

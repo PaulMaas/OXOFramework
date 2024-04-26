@@ -11,6 +11,8 @@ import java.util.Map;
 
 public class OXORequestConverter implements Converter
 {
+    protected final static int MAX_PARAMETER_VALUE_LENGTH = 1000;
+
     @Override
     public boolean canConvert(Class clazz)
     {
@@ -40,7 +42,15 @@ public class OXORequestConverter implements Converter
             for (String value : values) {
                 if (value != null) {
                     writer.startNode("value");
-                    writer.setValue(value);
+                    if (value.length() < MAX_PARAMETER_VALUE_LENGTH)
+                    {
+                        writer.setValue(value);
+                    }
+                    else
+                    {
+                        writer.setValue(">Value exceeds maximum length (" + MAX_PARAMETER_VALUE_LENGTH + ")<");
+                    }
+                    
                     writer.endNode();
                 }
             }

@@ -5,12 +5,17 @@ import java.io.OutputStream;
 import java.io.PipedInputStream;
 import java.io.PipedOutputStream;
 import java.lang.Thread.UncaughtExceptionHandler;
+import javax.servlet.ServletException;
+import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
 import javax.xml.transform.Transformer;
 import javax.xml.transform.TransformerException;
 import javax.xml.transform.TransformerFactory;
 import javax.xml.transform.TransformerFactoryConfigurationError;
 import javax.xml.transform.sax.SAXSource;
 import javax.xml.transform.stream.StreamResult;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.xml.sax.InputSource;
 import org.xml.sax.SAXException;
 import org.xml.sax.XMLReader;
@@ -26,10 +31,19 @@ import org.xml.sax.helpers.XMLReaderFactory;
  * In addition, add the ability to throw exceptions or return an error state. Currently this
  * is implemented as response.addException. Might be fine... just take a look.
  * 
+ * NOTE
+ * Why are we doing all this here? Can't we just use the logic in OXOServlet instead of this piping stuff...
+ * It seems like all we would really need to do is move the xslt filename lookup logic into an overrideable method and override that here...
+ * TODO
+ * Set up a test where we utilize what's in OXOServlet and see if we can get the same result. If not, make sure we document it here
+ * properly so we don't doubt this logic here again...
+ * 
  * @author Paul van der Maas
  */
 public abstract class WebService extends OXOServlet
 {
+    private final static Logger logger = LogManager.getLogger(WebService.class);
+
     private boolean responseAsJSON = false;
     private JsonOutputType jsonOutputType = JsonOutputType.JSON;
 
@@ -48,24 +62,88 @@ public abstract class WebService extends OXOServlet
     }
 
     @Override
-    protected void outputResponse(OXORequest request, OXOResponse response, OutputStream outputStream) throws IOException, SAXException, TransformerException, ReflectiveOperationException
+    protected void processRequest(OXORequest request, OXOResponse response) throws Exception
     {
-        if (this.responseAsJSON)
+        // NOTE: Response headers need to be set before anything is written to the response outputstream.
+        setAccessControlHeaders(response);
+
+        String serviceIdentifier = request.getParameter("serviceIdentifier");
+        String responseAs = request.getParameter("responseAs");
+
+        // If given, the responseAs parameter's value should either be XML or JSON.
+        if (responseAs != null && responseAs.equalsIgnoreCase("JSON"))
         {
-            outputResponseAsJSON(request, response, outputStream);
+            this.setResponseAsJSON(true);
         }
         else
         {
-            super.outputResponse(request, response, outputStream);
+            this.setResponseAsJSON(false);
+        }
+
+        if (serviceIdentifier != null) {
+            try {
+                response.setData((Data) this.getClass().getMethod(serviceIdentifier).invoke(this));
+            } catch(ReflectiveOperationException exception) {
+                // TODO
+                // It would be nicer if we make a custom OXOServletException which would also take a HTTP status code.
+                // Then we don't have to explicitly set the state here and can leave it to the OXOServlet.outputException to set it.
+                // We might even create subclasses of Exceptions where status (code) and message are already set...
+                response.setStatus(404);
+                logger.info("The service identifier (" + serviceIdentifier +") is invalid.", exception);
+                throw new ServletException("The service identifier (" + serviceIdentifier +") is invalid.", exception);
+            }
+        }
+        else
+        {
+            response.setStatus(404);
+            throw new ServletException("A valid service identifier is required.");
+        }
+    }
+
+    @Override
+    protected void doOptions(HttpServletRequest request, HttpServletResponse response) throws ServletException, IOException
+    {
+        setAccessControlHeaders(response);
+        response.setStatus(HttpServletResponse.SC_OK);
+    }
+
+    private void setAccessControlHeaders(HttpServletResponse response)
+    {
+        response.setHeader("Access-Control-Allow-Origin", "*");
+        response.setHeader("Access-Control-Allow-Methods", "GET,PUT,POST,DELETE");
+        response.setHeader("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept");
+    }
+
+    @Override
+    protected void writeXMLToOutputStream(OXORequest request, OXOResponse response, OutputStream outputStream) throws IOException, SAXException, TransformerException, ReflectiveOperationException
+    {
+        if (this.responseAsJSON)
+        {
+            writePipedXMLToOutputStreamAsJSON(request, response, outputStream);
+        }
+        else
+        {
+            super.writeXMLToOutputStream(request, response, outputStream);
         }
     }
     
-    protected void outputPipedResponse(OXORequest request, OXOResponse response, PipedOutputStream outputStream) throws IOException, SAXException, TransformerException, ReflectiveOperationException
+    /**
+     * This needs to be in a call accessible from the runner.
+     * 
+     * @param request
+     * @param response
+     * @param outputStream
+     * @throws IOException
+     * @throws SAXException
+     * @throws TransformerException
+     * @throws ReflectiveOperationException 
+     */
+    protected void pipeWriteResponseDataToOutputStreamAsXML(OXORequest request, OXOResponse response, PipedOutputStream outputStream) throws IOException, SAXException, TransformerException, ReflectiveOperationException
     {
-        super.outputResponse(request, response, outputStream);
+        super.writeXMLToOutputStream(request, response, outputStream);
     }
 
-    protected void outputResponseAsJSON(final OXORequest request, final OXOResponse response, OutputStream outputStream) throws IOException, SAXException, TransformerException
+    protected void writePipedXMLToOutputStreamAsJSON(final OXORequest request, final OXOResponse response, OutputStream outputStream) throws IOException, SAXException, TransformerException
     {
         // We can only transform transformed XML or untransformed XML to JSON, hence the following requirement.
         if (response.getTransformationOutputType() == null || response.getTransformationOutputType() == OXOResponse.TransformationOutputType.XML)
@@ -81,7 +159,7 @@ public abstract class WebService extends OXOServlet
                 {
                     try
                     {
-                        outputPipedResponse(request, response, pipedOutputStream);
+                        pipeWriteResponseDataToOutputStreamAsXML(request, response, pipedOutputStream);
                     }
                     catch (IOException | SAXException | TransformerException | ReflectiveOperationException exception)
                     {
@@ -159,23 +237,26 @@ public abstract class WebService extends OXOServlet
             {
                 Transformer transformer = transformerFactory.newTransformer(xslSource);
 
-                String mediaType = transformer.getOutputProperty("media-type");
-                if (mediaType == null)
-                {
-                    // Set the default.
-                    mediaType = "application/json";
+                // Set important response headers if not already set...
+                if (response.getContentType() == null) {
+                    String mediaType = transformer.getOutputProperty("media-type");
+                    if (mediaType == null)
+                    {
+                        // Set the default.
+                        mediaType = "application/json";
+                    }
+                    response.setContentType(mediaType);
                 }
-
-                String encoding = transformer.getOutputProperty("encoding");
-                if (encoding == null)
+                if (response.getCharacterEncoding() == null)
                 {
-                    // Set the default.
-                    encoding = "UTF-8";
+                    String encoding = transformer.getOutputProperty("encoding");
+                    if (encoding == null)
+                    {
+                        // Set the default.
+                        encoding = "UTF-8";
+                    }
+                    response.setCharacterEncoding(encoding);
                 }
-
-                // Set important response headers.
-                response.setContentType(mediaType);
-                response.setCharacterEncoding(encoding);
 
                 // Transform the XML to JSON.
                 transformer.transform(xmlSource, new StreamResult(outputStream));

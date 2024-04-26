@@ -23,6 +23,7 @@ public class OXOResponse extends HttpServletResponseWrapper
     private List<Notification> notifications;
 
     private Data data = null;
+    private boolean isCommitted = false;
 
     public OXOResponse(HttpServletResponse response)
     {
@@ -38,6 +39,34 @@ public class OXOResponse extends HttpServletResponseWrapper
     
     public Data getData() {
         return data;
+    }
+
+    /**
+     * When #OXOServlet.processRequest() or #Data.build() have committed (to) the response
+     * this should return false to indicate no further response generation/transformation is needed/wanted.
+     * 
+     * It is possible for #OXOServlet.processRequest() or #Data.build() to write to the response directly,
+     * which means the response is committed and we should not try to alter it. It is expected that
+     * #isCommitted(true) is called in such an event.
+     * 
+     * @return 
+     */
+    @Override
+    public boolean isCommitted()
+    {
+        if (this.isCommitted)
+        {
+            return true;
+        }
+        else
+        {
+            return super.isCommitted();
+        }
+    }
+
+    public void isCommitted(boolean isCommitted)
+    {
+        this.isCommitted = isCommitted;
     }
 
     public OXORequest getRequest() {

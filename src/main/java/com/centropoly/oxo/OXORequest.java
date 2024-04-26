@@ -3,6 +3,7 @@ package com.centropoly.oxo;
 import java.io.IOException;
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.Enumeration;
 import java.util.HashMap;
@@ -45,11 +46,19 @@ public class OXORequest extends HttpServletRequestWrapper
      */
     public void setParameters(String name, String[] values)
     {
+        if (name == null || values == null || Arrays.asList(values).contains(null))
+        {
+            throw new IllegalArgumentException();
+        }
         this.dynamicParameters.put(name, values);
     }
 
     public void setParameter(String name, String value)
     {
+        if (name == null || value == null)
+        {
+            throw new IllegalArgumentException();
+        }
         this.dynamicParameters.put(name, new String[] {value});
     }
 

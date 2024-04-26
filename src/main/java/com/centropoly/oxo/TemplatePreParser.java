@@ -39,6 +39,7 @@ public class TemplatePreParser
     
     public InputSource parse(InputSource inputSource) throws SAXException, IOException
     {
+        // NOTE I'm guessing this was done to essentially disable pre-parsing for now?
         if (0 == 0) throw new IOException("Template pre parser is being used");
         
         // Matches OXO's special property entities.
